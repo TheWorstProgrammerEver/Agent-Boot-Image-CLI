@@ -105,7 +105,7 @@ test("paths, identifiers, environment keys, digests, and URLs are validated", ()
   rejects(osLockSchema, credentialUrl, /without embedded credentials/);
 });
 
-test("plaintext credential fields and credential-bearing environment keys are rejected", () => {
+test("plaintext credential fields and non-public environment keys are rejected", () => {
   const { manifest, runnerPlan } = validAssemblyDocuments();
 
   const accountPassword = clone(manifest);
@@ -128,7 +128,30 @@ test("plaintext credential fields and credential-bearing environment keys are re
   commandToken.providers[0].command.token = "not-a-real-token";
   rejects(runnerPlanSchema, commandToken, /Plaintext credential fields are not permitted/);
 
-  const sensitiveEnvironment = clone(runnerPlan);
-  sensitiveEnvironment.steps[0].key = "GITHUB_API_TOKEN";
-  rejects(runnerPlanSchema, sensitiveEnvironment, /Credential-bearing environment keys/);
+  for (const key of [
+    "PGPASSWORD",
+    "GITHUB_API_TOKEN",
+    "GITHUB_PAT",
+    "DATABASE_URL",
+    "CUSTOM_CONFIG",
+  ]) {
+    const nonPublicEnvironment = clone(runnerPlan);
+    nonPublicEnvironment.steps[0].key = key;
+    rejects(
+      runnerPlanSchema,
+      nonPublicEnvironment,
+      /explicitly permitted public environment key/,
+    );
+  }
+
+  const promptEnvironment = clone(runnerPlan);
+  promptEnvironment.steps
+    .find((step) => step.kind === "prompt")
+    .variables.find((variable) => variable.source.kind === "environment").source.key =
+    "DATABASE_URL";
+  rejects(
+    runnerPlanSchema,
+    promptEnvironment,
+    /explicitly permitted public environment key/,
+  );
 });

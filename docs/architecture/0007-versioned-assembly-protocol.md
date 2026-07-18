@@ -51,8 +51,10 @@ fields never serve as implicit forward compatibility.
 Credential-bearing fields are not part of ordinary manifests or runner plans.
 Bootstrap passwords, Wi-Fi passphrases, prompt secret substitutions, and secret
 installation steps carry validated `secretId` references only. Environment keys
-that conventionally carry credentials are rejected. Secret contents are
-resolved only at the later authorized materialization boundary from ADR 0005.
+used by literal environment steps or prompt environment bindings must come from
+the versioned `PUBLIC_ENVIRONMENT_KEYS` allowlist. Unknown keys are rejected
+instead of relying on a credential-name blacklist. Secret contents are resolved
+only at the later authorized materialization boundary from ADR 0005.
 
 ## Consequences
 

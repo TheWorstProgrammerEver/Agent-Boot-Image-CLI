@@ -19,4 +19,7 @@ every runner-step variant.
 Consumers must call `assertCompatibleSchemaVersion` before detailed parsing.
 Schemas are strict and reject unknown fields. Credential content is represented
 only by `secretId`; ordinary manifests and runner plans have no password, token,
-private-key, or credential-value fields.
+private-key, or credential-value fields. Environment steps and prompt environment
+bindings accept only the versioned `PUBLIC_ENVIRONMENT_KEYS` allowlist. Unknown
+keys fail closed even when their names do not match a known credential pattern;
+credential material belongs in the secretId-backed descriptors instead.

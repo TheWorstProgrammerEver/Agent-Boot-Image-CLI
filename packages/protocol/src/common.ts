@@ -27,12 +27,14 @@ export interface CommandDescriptor {
   workingDirectory?: TargetLocation;
 }
 
+export const PUBLIC_ENVIRONMENT_KEYS = ["AGENT_NAME", "BOOTSTRAP_MODE"] as const;
+export type PublicEnvironmentKey = (typeof PUBLIC_ENVIRONMENT_KEYS)[number];
+
 const identifierPattern = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const environmentKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const usernamePattern = /^[a-z_][a-z0-9_-]{0,31}$/;
 const hostnamePattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const sensitiveEnvironmentSegment =
-  /(?:^|_)(?:API_?KEY|AUTH|CREDENTIALS?|PASS(?:PHRASE|WORD|WD)?|PRIVATE_?KEY|SECRETS?|TOKENS?)(?:_|$)/i;
+const publicEnvironmentKeys = new Set<string>(PUBLIC_ENVIRONMENT_KEYS);
 
 const parsePattern = (
   input: unknown,
@@ -49,7 +51,10 @@ const parsePattern = (
 export const parseIdentifier = (input: unknown, path: string): string =>
   parsePattern(input, path, identifierPattern, "a lowercase identifier", 64);
 
-export const parseEnvironmentKey = (input: unknown, path: string): string => {
+export const parsePublicEnvironmentKey = (
+  input: unknown,
+  path: string,
+): PublicEnvironmentKey => {
   const key = parsePattern(
     input,
     path,
@@ -57,10 +62,15 @@ export const parseEnvironmentKey = (input: unknown, path: string): string => {
     "a portable environment key",
     128,
   );
-  if (sensitiveEnvironmentSegment.test(key)) {
-    fail(path, "Credential-bearing environment keys are not permitted in runner plans.");
+  if (!publicEnvironmentKeys.has(key)) {
+    fail(
+      path,
+      `Expected an explicitly permitted public environment key (${PUBLIC_ENVIRONMENT_KEYS.join(
+        ", ",
+      )}); credential material must use secretId-backed descriptors.`,
+    );
   }
-  return key;
+  return key as PublicEnvironmentKey;
 };
 
 export const parseUsername = (input: unknown, path: string): string =>

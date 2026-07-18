@@ -30,8 +30,10 @@ export {
   type RunnerStep,
 } from "./steps.js";
 export {
+  PUBLIC_ENVIRONMENT_KEYS,
   SCHEMA_VERSION,
   type CommandDescriptor,
+  type PublicEnvironmentKey,
   type SchemaVersion,
   type SecretReference,
   type TargetLocation,

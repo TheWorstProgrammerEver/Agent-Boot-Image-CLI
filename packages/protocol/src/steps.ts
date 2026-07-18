@@ -1,9 +1,10 @@
 import {
   parseCommandDescriptor,
-  parseEnvironmentKey,
   parseIdentifier,
+  parsePublicEnvironmentKey,
   parseRelativePath,
   type CommandDescriptor,
+  type PublicEnvironmentKey,
 } from "./common.js";
 import {
   assertUnique,
@@ -26,13 +27,13 @@ export type EnvironmentStep =
   | (StepBase & {
       kind: "environment";
       operation: "set";
-      key: string;
+      key: PublicEnvironmentKey;
       value: string;
     })
   | (StepBase & {
       kind: "environment";
       operation: "unset";
-      key: string;
+      key: PublicEnvironmentKey;
     });
 
 export interface AutomaticStep extends StepBase {
@@ -54,7 +55,7 @@ export interface FireAndForgetStep extends StepBase {
 }
 
 export type PromptVariableSource =
-  | { kind: "environment"; key: string }
+  | { kind: "environment"; key: PublicEnvironmentKey }
   | { kind: "secret"; secretId: string };
 
 export interface PromptVariableBinding {
@@ -104,7 +105,10 @@ const parseEnvironmentStep: Parser<EnvironmentStep> = (input, path) => {
   );
   const base = parseStepBase(discriminator, path);
   const kind = parseLiteral(required(discriminator, "kind", path), `${path}.kind`, "environment");
-  const key = parseEnvironmentKey(required(discriminator, "key", path), `${path}.key`);
+  const key = parsePublicEnvironmentKey(
+    required(discriminator, "key", path),
+    `${path}.key`,
+  );
   if (operation === "set") {
     return {
       ...base,
@@ -173,7 +177,7 @@ const parsePromptVariableSource: Parser<PromptVariableSource> = (input, path) =>
     const value = parseObject(input, path, ["kind", "key"]);
     return {
       kind: "environment",
-      key: parseEnvironmentKey(required(value, "key", path), `${path}.key`),
+      key: parsePublicEnvironmentKey(required(value, "key", path), `${path}.key`),
     };
   }
   if (kind === "secret") {
