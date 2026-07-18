@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "paths": {
+      "@agent-boot/definition": ["../packages/definition/src/index.ts"],
+      "@agent-boot/protocol": ["../packages/protocol/src/index.ts"]
+    }
+  },
+  "include": ["definitive-agent/**/*.ts"]
+}
