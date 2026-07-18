@@ -126,6 +126,81 @@ test("persisted secret destinations reject traversal before recovery", async () 
   }
 });
 
+test("startup rejects semantically impossible checkpoint relationships", async () => {
+  const fixture = await createStateFixture();
+  try {
+    const initialized = await fixture.store.initialize(fixture.plan);
+    const startedStep = {
+      attempt: 1,
+      id: "install-secret",
+      index: 0,
+      phase: "started",
+    };
+    const preparedTransaction = {
+      destination: ".config/service/credential",
+      phase: "prepared",
+      secretId: "service-credential",
+      stepId: "install-secret",
+    };
+    const invalidCheckpoints = [
+      {
+        ...initialized,
+        revision: 1,
+      },
+      {
+        ...initialized,
+        revision: 1,
+        secretTransaction: preparedTransaction,
+      },
+      {
+        ...initialized,
+        currentStep: startedStep,
+        revision: 2,
+        secretTransaction: { ...preparedTransaction, stepId: "different-step" },
+      },
+      {
+        ...initialized,
+        currentStep: { ...startedStep, phase: "succeeded" },
+        revision: 3,
+        secretTransaction: preparedTransaction,
+      },
+      {
+        ...initialized,
+        currentStep: startedStep,
+        revision: 2,
+        terminal: { at: initialized.updatedAt, status: "succeeded" },
+      },
+      {
+        ...initialized,
+        currentStep: startedStep,
+      },
+      {
+        ...initialized,
+        revision: 1,
+        terminal: {
+          at: "2026-07-19T00:00:01.000Z",
+          diagnostic: {
+            code: "manual-intervention-required",
+            recovery: "manual-intervention",
+          },
+          status: "failed",
+        },
+      },
+    ];
+
+    for (const checkpoint of invalidCheckpoints) {
+      assert.throws(() => parseRunnerCheckpoint(checkpoint), CheckpointValidationError);
+      await writeCheckpoint(fixture.path, checkpoint);
+      assert.deepEqual(await fixture.store.inspect(fixture.plan), {
+        diagnostic: "state document does not match its schema",
+        status: "corrupt",
+      });
+    }
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("startup fails closed for broad permissions and symbolic links", async () => {
   const fixture = await createStateFixture();
   try {

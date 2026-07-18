@@ -225,6 +225,56 @@ export const checkpointSchemaVersion = (input: unknown): unknown =>
     ? (input as JsonObject).schemaVersion
     : undefined;
 
+const validateCheckpointInvariants = (
+  checkpoint: RunnerCheckpoint,
+  path: string,
+): RunnerCheckpoint => {
+  const { currentStep, revision, secretTransaction, terminal, updatedAt } = checkpoint;
+  const pristine = currentStep === null && secretTransaction === null && terminal === null;
+  if ((revision === 0) !== pristine) {
+    fail(`${path}.revision`, "Revision zero must identify exactly an unmodified checkpoint.");
+  }
+  if (secretTransaction !== null) {
+    if (currentStep === null) {
+      fail(`${path}.secretTransaction`, "A secret transaction requires a current step.");
+    } else if (secretTransaction.stepId !== currentStep.id) {
+      fail(
+        `${path}.secretTransaction.stepId`,
+        "The secret transaction must belong to the current step.",
+      );
+    } else if (
+      currentStep.phase === "succeeded" &&
+      secretTransaction.phase !== "committed"
+    ) {
+      fail(
+        `${path}.secretTransaction.phase`,
+        "A succeeded step cannot retain an incomplete secret transaction.",
+      );
+    }
+  }
+  if (
+    terminal?.status === "succeeded" &&
+    currentStep !== null &&
+    currentStep.phase !== "succeeded"
+  ) {
+    fail(`${path}.terminal.status`, "Terminal success requires a succeeded current step.");
+  }
+  if (
+    terminal?.status === "succeeded" &&
+    secretTransaction !== null &&
+    secretTransaction.phase !== "committed"
+  ) {
+    fail(
+      `${path}.terminal.status`,
+      "Terminal success cannot retain an incomplete secret transaction.",
+    );
+  }
+  if (terminal !== null && terminal.at !== updatedAt) {
+    fail(`${path}.terminal.at`, "A terminal checkpoint must be the final update.");
+  }
+  return checkpoint;
+};
+
 export const parseRunnerCheckpoint = (input: unknown): RunnerCheckpoint => {
   const path = "runner-checkpoint.json";
   const value = object(input, path, [
@@ -243,7 +293,7 @@ export const parseRunnerCheckpoint = (input: unknown): RunnerCheckpoint => {
   const currentStep = required(value, "currentStep", path);
   const secretTransaction = required(value, "secretTransaction", path);
   const terminal = required(value, "terminal", path);
-  return {
+  return validateCheckpointInvariants({
     currentStep:
       currentStep === null ? null : parseStep(currentStep, `${path}.currentStep`),
     plan: parsePlan(required(value, "plan", path), `${path}.plan`),
@@ -255,5 +305,5 @@ export const parseRunnerCheckpoint = (input: unknown): RunnerCheckpoint => {
         : parseSecretTransaction(secretTransaction, `${path}.secretTransaction`),
     terminal: terminal === null ? null : parseTerminal(terminal, `${path}.terminal`),
     updatedAt: timestamp(required(value, "updatedAt", path), `${path}.updatedAt`),
-  };
+  }, path);
 };

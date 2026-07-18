@@ -90,11 +90,14 @@ test("secret transactions resume one idempotent phase at a time", async () => {
       fixture.store.checkpointStep(fixture.plan, step("succeeded")),
       /must be committed/u,
     );
+    const failed = await fixture.store.checkpointStep(fixture.plan, step("failed"));
+    assert.equal(failed.secretTransaction.phase, "prepared");
+    await fixture.store.checkpointStep(fixture.plan, step("started", 2));
 
     for (const phase of ["installed", "source-removed", "committed"]) {
       await fixture.store.checkpointSecretTransaction(fixture.plan, transaction(phase));
     }
-    const succeeded = await fixture.store.checkpointStep(fixture.plan, step("succeeded"));
+    const succeeded = await fixture.store.checkpointStep(fixture.plan, step("succeeded", 2));
     assert.equal(succeeded.secretTransaction.phase, "committed");
 
     const next = await fixture.store.checkpointStep(fixture.plan, {
