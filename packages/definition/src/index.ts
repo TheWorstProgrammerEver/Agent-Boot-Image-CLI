@@ -1,1 +1,64 @@
-export {};
+export {
+  agentDefinitionSchema,
+  DEFINITION_SCHEMA_VERSION,
+  defineAgent,
+  type AgentDefinition,
+  type AgentDefinitionInput,
+  type AgentDefinitionSchema,
+} from "./definition.js";
+export {
+  command,
+  type CommandExecutable,
+  type CommandExecutableInput,
+  type CommandInput,
+  type DefinitionCommand,
+} from "./command.js";
+export {
+  asset,
+  curatedOperatingSystem,
+  fromEnvironment,
+  fromSecret,
+  prompt,
+  script,
+  secret,
+  type AssetDefinition,
+  type AssetInput,
+  type CuratedOperatingSystem,
+  type CuratedOperatingSystemInput,
+  type PromptDefinition,
+  type PromptInput,
+  type PromptVariableInput,
+  type ScriptDefinition,
+  type ScriptInput,
+  type SecretDefinition,
+  type SecretInput,
+} from "./resources.js";
+export {
+  executableProvider,
+  provider,
+  type ProviderDefinition,
+  type ProviderInput,
+} from "./provider.js";
+export {
+  automatic,
+  fireAndForget,
+  installUserSecret,
+  manual,
+  promptVariable,
+  renderPrompt,
+  runProvider,
+  setEnvironment,
+  unsetEnvironment,
+  type AutomaticStep,
+  type EnvironmentStep,
+  type FireAndForgetStep,
+  type InstallUserSecretStep,
+  type ManualStep,
+  type PromptStep,
+  type PromptVariableBinding,
+  type PromptVariableBindingInput,
+  type ProviderStep,
+  type SequenceStep,
+  type SequenceStepInput,
+} from "./steps.js";
+export { DefinitionValidationError } from "./validation.js";

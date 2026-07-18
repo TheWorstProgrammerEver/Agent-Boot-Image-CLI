@@ -19,6 +19,9 @@
     "strict": true,
     "target": "ES2023",
     "types": ["node"],
+    "paths": {
+      "@agent-boot/protocol": ["./packages/protocol/src/index.ts"]
+    },
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   }
