@@ -10,5 +10,8 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@agent-boot/protocol": "0.0.0"
+  }
 }

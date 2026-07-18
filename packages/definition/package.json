@@ -12,6 +12,6 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@agent-boot/assembly": "0.0.0"
+    "@agent-boot/protocol": "0.0.0"
   }
 }

@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/protocol" },
     { "path": "packages/assembly" },
     { "path": "packages/definition" },
     { "path": "packages/synth" },

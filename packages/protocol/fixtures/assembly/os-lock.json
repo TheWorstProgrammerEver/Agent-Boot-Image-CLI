@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "raspberry-pi-os-lite-trixie-arm64-2026-06-18",
+  "operatingSystem": {
+    "family": "raspberry-pi-os",
+    "release": "debian-trixie",
+    "variant": "lite",
+    "architecture": "arm64",
+    "boards": ["raspberry-pi-5"]
+  },
+  "artifact": {
+    "url": "https://downloads.example.invalid/raspios-lite-arm64.img.xz",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "byteLength": 524288000
+  },
+  "partitions": [
+    {
+      "role": "boot",
+      "filesystem": "fat32",
+      "label": "bootfs"
+    },
+    {
+      "role": "root",
+      "filesystem": "ext4",
+      "label": "rootfs"
+    }
+  ]
+}

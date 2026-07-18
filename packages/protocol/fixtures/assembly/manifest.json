@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "assemblyId": "reviewer-agent-v1",
+  "agent": {
+    "id": "reviewer-agent",
+    "displayName": "Reviewer Agent"
+  },
+  "files": {
+    "runnerPlan": "runner-plan.json",
+    "osLock": "os-lock.json",
+    "assetsDirectory": "assets",
+    "promptsDirectory": "prompts"
+  },
+  "bootstrap": {
+    "account": {
+      "username": "reviewer",
+      "initialPassword": {
+        "secretId": "initial-password"
+      }
+    },
+    "network": {
+      "hostname": "reviewer-agent",
+      "wifi": {
+        "ssid": "example-network",
+        "passphrase": {
+          "secretId": "wifi-passphrase"
+        }
+      }
+    },
+    "runnerInstallation": {
+      "runtimeAssetId": "node-runtime",
+      "entrypointAssetId": "runner-entrypoint"
+    }
+  },
+  "assets": [
+    {
+      "id": "node-runtime",
+      "path": "assets/runtime.txt",
+      "sha256": "c760217d7de308e0aac4f3cbfa33ec9139e08f5e065d1aabca8fe3e62ad13043",
+      "byteLength": 29,
+      "placement": {
+        "scope": "system",
+        "path": "opt/agent-boot/runtime/runtime.txt"
+      }
+    },
+    {
+      "id": "runner-entrypoint",
+      "path": "assets/runner.mjs",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "byteLength": 11,
+      "placement": {
+        "scope": "system",
+        "path": "opt/agent-boot/runner.mjs"
+      }
+    }
+  ],
+  "prompts": [
+    {
+      "id": "install-profile",
+      "path": "prompts/install-profile.md",
+      "sha256": "9878188cfe8eaee8cf1b5e9ba93bd51145fe8b4636550ebdfe5e63f0f66d9d44",
+      "variables": ["agent-name", "callback-secret"]
+    }
+  ]
+}

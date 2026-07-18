@@ -7,7 +7,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../assembly" },
-    { "path": "../process" }
+    { "path": "../process" },
+    { "path": "../protocol" }
   ]
 }

@@ -1,12 +1,13 @@
 {
   "packagePrefix": "@agent-boot/",
   "packages": {
-    "assembly": [],
-    "definition": ["assembly"],
-    "synth": ["assembly", "definition"],
+    "protocol": [],
+    "assembly": ["protocol"],
+    "definition": ["protocol"],
+    "synth": ["assembly", "definition", "protocol"],
     "process": [],
-    "os-linux": ["assembly", "process"],
-    "runner": ["assembly", "process"],
-    "cli": ["assembly", "os-linux", "process", "runner", "synth"]
+    "os-linux": ["process", "protocol"],
+    "runner": ["process", "protocol"],
+    "cli": ["assembly", "os-linux", "process", "protocol", "runner", "synth"]
   }
 }
