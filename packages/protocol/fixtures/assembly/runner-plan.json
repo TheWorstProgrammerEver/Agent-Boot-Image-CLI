@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "agentId": "reviewer-agent",
+  "providers": [
+    {
+      "id": "codex",
+      "command": {
+        "executable": "codex",
+        "arguments": ["exec", "-"]
+      },
+      "promptTransport": "stdin"
+    }
+  ],
+  "steps": [
+    {
+      "id": "set-agent-name",
+      "kind": "environment",
+      "operation": "set",
+      "key": "AGENT_NAME",
+      "value": "reviewer-agent"
+    },
+    {
+      "id": "clear-bootstrap-mode",
+      "kind": "environment",
+      "operation": "unset",
+      "key": "BOOTSTRAP_MODE"
+    },
+    {
+      "id": "verify-runtime",
+      "kind": "automatic",
+      "command": {
+        "executable": "node",
+        "arguments": ["--version"]
+      }
+    },
+    {
+      "id": "authenticate-provider",
+      "kind": "manual",
+      "command": {
+        "executable": "codex",
+        "arguments": ["login", "--device-auth"],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
+      },
+      "completionCheck": {
+        "executable": "codex",
+        "arguments": ["login", "status"]
+      },
+      "pollIntervalSeconds": 5
+    },
+    {
+      "id": "start-progress-signal",
+      "kind": "fire-and-forget",
+      "command": {
+        "executable": "systemd-notify",
+        "arguments": ["--status=Agent setup is running"]
+      },
+      "lifetime": "runner"
+    },
+    {
+      "id": "install-github-app-key",
+      "kind": "install-user-secret",
+      "secretId": "github-app-key",
+      "destination": ".config/codex-github/app.pem"
+    },
+    {
+      "id": "render-install-profile",
+      "kind": "prompt",
+      "templateId": "install-profile",
+      "renderedPromptId": "install-profile-rendered",
+      "retention": "ephemeral",
+      "variables": [
+        {
+          "name": "agent-name",
+          "source": {
+            "kind": "environment",
+            "key": "AGENT_NAME"
+          }
+        },
+        {
+          "name": "callback-secret",
+          "source": {
+            "kind": "secret",
+            "secretId": "callback-secret"
+          }
+        }
+      ]
+    },
+    {
+      "id": "run-install-profile",
+      "kind": "provider",
+      "providerId": "codex",
+      "renderedPromptId": "install-profile-rendered"
+    }
+  ]
+}

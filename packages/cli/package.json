@@ -15,6 +15,7 @@
     "@agent-boot/assembly": "0.0.0",
     "@agent-boot/os-linux": "0.0.0",
     "@agent-boot/process": "0.0.0",
+    "@agent-boot/protocol": "0.0.0",
     "@agent-boot/runner": "0.0.0",
     "@agent-boot/synth": "0.0.0"
   }

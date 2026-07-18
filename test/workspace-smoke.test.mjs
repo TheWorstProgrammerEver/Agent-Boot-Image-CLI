@@ -4,6 +4,7 @@ import test from "node:test";
 import { URL } from "node:url";
 
 const packages = [
+  "protocol",
   "assembly",
   "definition",
   "synth",

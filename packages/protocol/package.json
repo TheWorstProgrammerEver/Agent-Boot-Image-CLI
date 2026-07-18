@@ -1,0 +1,14 @@
+{
+  "name": "@agent-boot/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider-neutral, OS-neutral Agent Boot serialized contracts.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "fixtures"]
+}

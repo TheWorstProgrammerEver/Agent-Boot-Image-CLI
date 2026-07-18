@@ -5,12 +5,13 @@ workspace before product behavior is added.
 
 | Layer | May depend on | Must remain independent from |
 | --- | --- | --- |
-| `assembly` | None | Definitions, host adapters, CLI, runner implementation |
-| `definition` | `assembly` | OS adapters, process implementations, runner |
-| `synth` | `assembly`, `definition` | OS adapters, process implementations, runner |
+| `protocol` | None | Definitions, assembly I/O, host adapters, CLI, runner implementation |
+| `assembly` | `protocol` | Definitions, host adapters, CLI, runner implementation |
+| `definition` | `protocol` | OS adapters, process implementations, runner |
+| `synth` | `assembly`, `definition`, `protocol` | OS adapters, process implementations, runner |
 | `process` | None | OS adapters and product workflows |
-| `os-linux` | `assembly`, `process` | Definition evaluation and synthesis |
-| `runner` | `assembly`, `process` | Definition evaluation and host OS adapters |
+| `os-linux` | `process`, `protocol` | Definition evaluation and synthesis |
+| `runner` | `process`, `protocol` | Definition evaluation, assembly I/O, and host OS adapters |
 | `cli` | All composition dependencies | N/A; this is the composition root |
 
 `config/package-boundaries.json` is the machine-readable form of this table.
@@ -25,3 +26,4 @@ TypeScript imports against it.
 4. [Private target runner](0004-private-target-runner.md)
 5. [Secret materialization and redaction boundary](0005-secret-redaction-boundary.md)
 6. [Separate process adapters](0006-separate-process-adapters.md)
+7. [Versioned assembly protocol compatibility](0007-versioned-assembly-protocol.md)
