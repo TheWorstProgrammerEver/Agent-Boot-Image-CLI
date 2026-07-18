@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { chmod } from "node:fs/promises";
 import { dirname } from "node:path";
 import test from "node:test";
 
@@ -33,6 +34,29 @@ test("writes sync the private temporary file before rename and sync the director
     assert.ok(tempSync < rename);
     assert.ok(rename < directorySync);
     assert.equal(await checkpointTempNames(fixture.path).then(names => names.length), 0);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("initialization rechecks directory trust before creating a temporary file", async () => {
+  const fixture = await createStateFixture();
+  try {
+    class BroadDirectoryAfterCreationFileSystem extends FaultInjectingStateFileSystem {
+      async mkdir(path, options) {
+        await super.mkdir(path, options);
+        await chmod(path, 0o777);
+      }
+    }
+    const fileSystem = new BroadDirectoryAfterCreationFileSystem(() => undefined);
+    const store = new RunnerStateStore({ clock: fixture.clock, fileSystem, path: fixture.path });
+
+    await assert.rejects(store.initialize(fixture.plan), StateAccessError);
+    assert.deepEqual(await new RunnerStateStore({ path: fixture.path }).inspect(fixture.plan), {
+      mode: 0o777,
+      status: "unsafe-directory-permissions",
+    });
+    assert.deepEqual(await checkpointTempNames(fixture.path), []);
   } finally {
     await fixture.cleanup();
   }

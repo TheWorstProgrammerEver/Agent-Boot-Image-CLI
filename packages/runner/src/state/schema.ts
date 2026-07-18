@@ -1,4 +1,3 @@
-import { posix } from "node:path";
 import { constants as osConstants } from "node:os";
 
 import { CheckpointValidationError } from "./errors.js";
@@ -85,9 +84,15 @@ const identifier = (input: unknown, path: string): string => {
 };
 
 const relativePath = (input: unknown, path: string): string => {
-  const value = string(input, path, 1024);
-  if (value.startsWith("/") || value === "." || posix.normalize(value) !== value) {
-    fail(path, "Expected a normalized relative path.");
+  const value = string(input, path, 512);
+  const parts = value.split("/");
+  if (
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("\\") ||
+    parts.some((part) => part === "" || part === "." || part === "..")
+  ) {
+    fail(path, "Expected a normalized relative path without traversal.");
   }
   return value;
 };

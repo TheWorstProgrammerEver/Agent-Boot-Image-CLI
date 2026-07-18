@@ -1,4 +1,8 @@
-import { cleanupCheckpointTemps, writeFileAtomically } from "./atomic-file.js";
+import {
+  cleanupCheckpointTemps,
+  inspectCheckpointDirectory,
+  writeFileAtomically,
+} from "./atomic-file.js";
 import { type Clock, SystemClock } from "./clock.js";
 import { CheckpointValidationError, StateAccessError, UnsafeRecoveryError } from "./errors.js";
 import { NodeStateFileSystem, type StateFileSystem } from "./filesystem.js";
@@ -33,7 +37,13 @@ export type CheckpointInspection =
     }
   | { readonly foundVersion: number; readonly status: "incompatible" }
   | { readonly diagnostic: string; readonly status: "corrupt" }
-  | { readonly mode: number; readonly status: "unsafe-permissions" };
+  | { readonly mode: number; readonly status: "unsafe-permissions" }
+  | { readonly mode: number; readonly status: "unsafe-directory-permissions" }
+  | {
+      readonly actualOwner: number;
+      readonly expectedOwner: number;
+      readonly status: "unsafe-directory-owner";
+    };
 
 export interface RunnerStateStoreOptions {
   readonly clock?: Clock;
@@ -76,19 +86,34 @@ const recoveryError = (inspection: Exclude<CheckpointInspection, { status: "vali
         `checkpoint permissions are ${inspection.mode.toString(8)}`,
         "Set the state file mode to 0600 and verify its ownership before resuming.",
       );
+    case "unsafe-directory-permissions":
+      throw new UnsafeRecoveryError(
+        `checkpoint directory permissions are ${inspection.mode.toString(8)}`,
+        "Remove group/other write access and verify the directory ownership before resuming.",
+      );
+    case "unsafe-directory-owner":
+      throw new UnsafeRecoveryError(
+        "checkpoint directory is owned by a different user",
+        "Restore the state directory to the runner user before resuming.",
+      );
   }
 };
 
 export class RunnerStateStore {
   readonly #clock: Clock;
   readonly #fileSystem: StateFileSystem;
+  readonly #ownerUid: number;
   readonly #path: string;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(options: RunnerStateStoreOptions) {
     if (options.path.length === 0) throw new TypeError("path must not be empty");
+    if (process.getuid === undefined) {
+      throw new TypeError("runner checkpoint storage requires POSIX owner identifiers");
+    }
     this.#clock = options.clock ?? new SystemClock();
     this.#fileSystem = options.fileSystem ?? new NodeStateFileSystem();
+    this.#ownerUid = process.getuid();
     this.#path = options.path;
   }
 
@@ -147,6 +172,36 @@ export class RunnerStateStore {
   }
 
   async #inspect(expectedPlan: RunnerPlanIdentity): Promise<CheckpointInspection> {
+    let directoryInspection;
+    try {
+      directoryInspection = await inspectCheckpointDirectory(
+        this.#fileSystem,
+        this.#path,
+        this.#ownerUid,
+      );
+    } catch (error) {
+      throw accessError("inspect state directory", error);
+    }
+    switch (directoryInspection.status) {
+      case "absent":
+        return { status: "absent" };
+      case "corrupt":
+        return directoryInspection;
+      case "unsafe-permissions":
+        return {
+          mode: directoryInspection.mode,
+          status: "unsafe-directory-permissions",
+        };
+      case "unsafe-owner":
+        return {
+          actualOwner: directoryInspection.actualOwner,
+          expectedOwner: directoryInspection.expectedOwner,
+          status: "unsafe-directory-owner",
+        };
+      case "valid":
+        break;
+    }
+
     try {
       await cleanupCheckpointTemps(this.#fileSystem, this.#path);
     } catch (error) {
@@ -207,7 +262,12 @@ export class RunnerStateStore {
 
   async #persist(state: RunnerCheckpoint): Promise<void> {
     try {
-      await writeFileAtomically(this.#fileSystem, this.#path, `${JSON.stringify(state, null, 2)}\n`);
+      await writeFileAtomically(
+        this.#fileSystem,
+        this.#path,
+        `${JSON.stringify(state, null, 2)}\n`,
+        this.#ownerUid,
+      );
     } catch (error) {
       throw accessError("persist", error);
     }

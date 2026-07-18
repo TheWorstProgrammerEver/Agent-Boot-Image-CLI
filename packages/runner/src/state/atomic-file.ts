@@ -4,6 +4,17 @@ import { basename, dirname, join } from "node:path";
 
 import type { StateFileHandle, StateFileSystem } from "./filesystem.js";
 
+export type CheckpointDirectoryInspection =
+  | { readonly status: "absent" }
+  | { readonly status: "valid" }
+  | { readonly diagnostic: string; readonly status: "corrupt" }
+  | { readonly mode: number; readonly status: "unsafe-permissions" }
+  | {
+      readonly actualOwner: number;
+      readonly expectedOwner: number;
+      readonly status: "unsafe-owner";
+    };
+
 const errorCode = (error: unknown): string | undefined =>
   typeof (error as NodeJS.ErrnoException).code === "string"
     ? (error as NodeJS.ErrnoException).code
@@ -22,6 +33,39 @@ const unlinkIfPresent = async (fileSystem: StateFileSystem, path: string): Promi
     await fileSystem.unlink(path);
   } catch (error) {
     if (errorCode(error) !== "ENOENT") throw error;
+  }
+};
+
+export const inspectCheckpointDirectory = async (
+  fileSystem: StateFileSystem,
+  path: string,
+  expectedOwner: number,
+): Promise<CheckpointDirectoryInspection> => {
+  let stat;
+  try {
+    stat = await fileSystem.lstat(dirname(path));
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return { status: "absent" };
+    throw error;
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    return { diagnostic: "state directory path is not a directory", status: "corrupt" };
+  }
+  const mode = stat.mode & 0o777;
+  if ((mode & 0o022) !== 0) return { mode, status: "unsafe-permissions" };
+  return stat.uid === expectedOwner
+    ? { status: "valid" }
+    : { actualOwner: stat.uid, expectedOwner, status: "unsafe-owner" };
+};
+
+const requireTrustedCheckpointDirectory = async (
+  fileSystem: StateFileSystem,
+  path: string,
+  expectedOwner: number,
+): Promise<void> => {
+  const inspection = await inspectCheckpointDirectory(fileSystem, path, expectedOwner);
+  if (inspection.status !== "valid") {
+    throw new Error(`checkpoint directory is ${inspection.status}`);
   }
 };
 
@@ -64,9 +108,11 @@ export const writeFileAtomically = async (
   fileSystem: StateFileSystem,
   path: string,
   contents: string,
+  expectedOwner: number,
 ): Promise<void> => {
   const directory = dirname(path);
   await fileSystem.mkdir(directory, { mode: 0o700, recursive: true });
+  await requireTrustedCheckpointDirectory(fileSystem, path, expectedOwner);
   const temporaryPath = join(
     directory,
     `${tempPrefixFor(path)}${String(process.pid)}.${randomUUID()}.tmp`,

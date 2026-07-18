@@ -9,6 +9,8 @@ export interface StateFileHandle {
 export interface StateFileStat {
   readonly mode: number;
   readonly size: number;
+  readonly uid: number;
+  isDirectory(): boolean;
   isFile(): boolean;
   isSymbolicLink(): boolean;
 }

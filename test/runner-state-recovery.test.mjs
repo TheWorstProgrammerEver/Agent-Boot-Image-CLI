@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 
 import {
+  CheckpointValidationError,
+  NodeStateFileSystem,
   RUNNER_CHECKPOINT_SCHEMA_VERSION,
   RunnerStateStore,
   StateAccessError,
   UnsafeRecoveryError,
+  parseRunnerCheckpoint,
 } from "@agent-boot/runner";
 
 import {
@@ -85,6 +89,43 @@ test("startup distinguishes incompatible, corrupt, truncated, and oversized stat
   }
 });
 
+test("persisted secret destinations reject traversal before recovery", async () => {
+  const fixture = await createStateFixture();
+  try {
+    const initialized = await fixture.store.initialize(fixture.plan);
+    const destinationPaths = [
+      ".",
+      "..",
+      "../outside-home",
+      "config/../outside-home",
+      "config//credential",
+      "config/./credential",
+      "config\\credential",
+      "config/",
+    ];
+
+    for (const destination of destinationPaths) {
+      const checkpoint = {
+        ...initialized,
+        secretTransaction: {
+          destination,
+          phase: "prepared",
+          secretId: "service-credential",
+          stepId: "install-secret",
+        },
+      };
+      assert.throws(() => parseRunnerCheckpoint(checkpoint), CheckpointValidationError);
+      await writeCheckpoint(fixture.path, checkpoint);
+      assert.deepEqual(await fixture.store.inspect(fixture.plan), {
+        diagnostic: "state document does not match its schema",
+        status: "corrupt",
+      });
+    }
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("startup fails closed for broad permissions and symbolic links", async () => {
   const fixture = await createStateFixture();
   try {
@@ -111,6 +152,68 @@ test("startup fails closed for broad permissions and symbolic links", async () =
       diagnostic: "state path is not a regular file",
       status: "corrupt",
     });
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("startup distrusts a broadly writable checkpoint directory before cleanup or reads", async () => {
+  const fixture = await createStateFixture();
+  try {
+    await fixture.store.initialize(fixture.plan);
+    const directory = dirname(fixture.path);
+    const interrupted = join(directory, `.${basename(fixture.path)}.123.interrupted.tmp`);
+    await writeFile(interrupted, "partial", { mode: 0o600 });
+    await chmod(directory, 0o777);
+
+    const events = [];
+    const fileSystem = new FaultInjectingStateFileSystem(event => events.push(event));
+    const store = new RunnerStateStore({ fileSystem, path: fixture.path });
+    assert.deepEqual(await store.inspect(fixture.plan), {
+      mode: 0o777,
+      status: "unsafe-directory-permissions",
+    });
+    assert.equal(events.some(event => event.stage === "before-read"), false);
+    assert.equal(events.some(event => event.stage === "before-unlink"), false);
+    assert.equal(await readFile(interrupted, "utf8"), "partial");
+    await assert.rejects(store.initialize(fixture.plan), /Remove group\/other write access/u);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("startup distrusts a checkpoint directory owned by another user", async () => {
+  const fixture = await createStateFixture();
+  try {
+    await fixture.store.initialize(fixture.plan);
+    const directory = dirname(fixture.path);
+    const expectedOwner = process.getuid();
+    const actualOwner = expectedOwner + 1;
+    class ForeignOwnerStateFileSystem extends NodeStateFileSystem {
+      async lstat(path) {
+        const fileStat = await super.lstat(path);
+        if (path !== directory) return fileStat;
+        return {
+          mode: fileStat.mode,
+          size: fileStat.size,
+          uid: actualOwner,
+          isDirectory: () => fileStat.isDirectory(),
+          isFile: () => fileStat.isFile(),
+          isSymbolicLink: () => fileStat.isSymbolicLink(),
+        };
+      }
+    }
+    const store = new RunnerStateStore({
+      fileSystem: new ForeignOwnerStateFileSystem(),
+      path: fixture.path,
+    });
+
+    assert.deepEqual(await store.inspect(fixture.plan), {
+      actualOwner,
+      expectedOwner,
+      status: "unsafe-directory-owner",
+    });
+    await assert.rejects(store.initialize(fixture.plan), /owned by a different user/u);
   } finally {
     await fixture.cleanup();
   }
