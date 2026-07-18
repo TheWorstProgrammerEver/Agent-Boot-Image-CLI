@@ -1,0 +1,21 @@
+{
+  "name": "@agent-boot/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Host-side Agent Boot command-line composition root.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@agent-boot/assembly": "0.0.0",
+    "@agent-boot/os-linux": "0.0.0",
+    "@agent-boot/process": "0.0.0",
+    "@agent-boot/runner": "0.0.0",
+    "@agent-boot/synth": "0.0.0"
+  }
+}

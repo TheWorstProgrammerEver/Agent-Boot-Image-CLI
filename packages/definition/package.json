@@ -1,0 +1,17 @@
+{
+  "name": "@agent-boot/definition",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Trusted host-side TypeScript definition SDK.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@agent-boot/assembly": "0.0.0"
+  }
+}
