@@ -23,6 +23,8 @@ export interface LocalReference<K extends LocalReferenceKind> {
   };
 }
 
+const hasEncodedNul = (pathname: string): boolean => /%00/iu.test(pathname);
+
 export const parseDefinitionUrl = (input: unknown, path: string): string => {
   const value = parseString(input, path, { maxLength: 4096 });
   try {
@@ -34,7 +36,8 @@ export const parseDefinitionUrl = (input: unknown, path: string): string => {
       url.password !== "" ||
       url.search !== "" ||
       url.hash !== "" ||
-      url.pathname.endsWith("/")
+      url.pathname.endsWith("/") ||
+      hasEncodedNul(url.pathname)
     ) {
       throw new Error("not a definition file URL");
     }
@@ -61,7 +64,8 @@ const resolveSource = (input: unknown, definitionUrl: string, path: string): str
         parsed.search !== "" ||
         parsed.hash !== "" ||
         parsed.pathname.endsWith("/") ||
-        /%2f|%5c/iu.test(parsed.pathname)
+        /%2f|%5c/iu.test(parsed.pathname) ||
+        hasEncodedNul(parsed.pathname)
       ) {
         throw new Error("not an opaque local reference");
       }
@@ -84,8 +88,12 @@ const resolveSource = (input: unknown, definitionUrl: string, path: string): str
     fail(path, "Expected a relative local path without a URL scheme, query, or fragment.");
   }
   const resolved = new URL(source, definitionUrl);
-  if (resolved.pathname.endsWith("/") || /%2f|%5c/iu.test(resolved.pathname)) {
-    fail(path, "Expected a local file path, not a directory or encoded separator.");
+  if (
+    resolved.pathname.endsWith("/") ||
+    /%2f|%5c/iu.test(resolved.pathname) ||
+    hasEncodedNul(resolved.pathname)
+  ) {
+    fail(path, "Expected a local file path, not a directory, encoded separator, or NUL.");
   }
   return resolved.href;
 };

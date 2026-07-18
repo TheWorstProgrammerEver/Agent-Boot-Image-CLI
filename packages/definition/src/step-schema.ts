@@ -1,8 +1,7 @@
 import { parseCommand } from "./command.js";
 import {
   parsePromptVariableSource,
-  parseRegisteredReference,
-  parseSecretReference,
+  parseExclusiveSecretReference,
   type ResourceRegistry,
 } from "./resources.js";
 import type { PromptVariableBinding, SequenceStep } from "./steps.js";
@@ -155,18 +154,7 @@ export const parseStep = (
     const value = parseObject(input, path, [
       "id", "kind", "secret", "secretId", "destination",
     ]);
-    const reference = Object.hasOwn(value, "secret")
-      ? parseSecretReference(
-          required(value, "secret", path),
-          registry,
-          `${path}.secret`,
-        )
-      : parseRegisteredReference(
-          { secretId: value.secretId },
-          "secret",
-          registry.secrets,
-          path,
-        );
+    const reference = parseExclusiveSecretReference(value, registry, path);
     return {
       ...base,
       kind,

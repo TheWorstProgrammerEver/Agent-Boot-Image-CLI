@@ -25,6 +25,10 @@ test("identity, Unix username, and definition URL fail independently", () => {
     (input) => { input.definitionUrl = "file://remote-host/my-agent.ts"; },
     /absolute file URL/u,
   );
+  rejects(
+    (input) => { input.definitionUrl = "file:///workspace/definitions/my-agent%00.ts"; },
+    /absolute file URL/u,
+  );
   rejects((input) => { input.schemaVersion = 2; }, /schemaVersion.*Expected 1/u);
   rejects((input) => { input.futureField = true; }, /futureField.*Unknown field/u);
 });
@@ -42,6 +46,30 @@ test("curated OS compatibility fields fail independently", () => {
     (input) => { input.operatingSystem.compatibility.boards = []; },
     /boards.*1-64 items/u,
   );
+  rejects(
+    (input) => {
+      input.operatingSystem.compatibility.boards = Array.from(
+        { length: 65 },
+        (_, index) => `board-${String(index)}`,
+      );
+    },
+    /boards.*1-64 items/u,
+  );
+});
+
+test("network hostname and SSID fields fail independently", () => {
+  rejects(
+    (input) => { input.network.hostname = "My_Agent"; },
+    /hostname.*lowercase hostname label/u,
+  );
+  rejects(
+    (input) => { input.network.wifi.ssid = ""; },
+    /ssid.*1-32 characters/u,
+  );
+  rejects(
+    (input) => { input.network.wifi.ssid = "x".repeat(33); },
+    /ssid.*1-32 characters/u,
+  );
 });
 
 test("local and target paths fail independently", () => {
@@ -54,6 +82,23 @@ test("local and target paths fail independently", () => {
     /local file path/u,
   );
   rejects(
+    (input) => { input.assets[0].source = "./assets/agent%00.json"; },
+    /local file path.*NUL/u,
+  );
+  rejects(
+    (input) => {
+      input.assets[0].source = {
+        kind: "local",
+        url: "file:///workspace/definitions/assets/agent%00.json",
+      };
+    },
+    /absolute file URL/u,
+  );
+  rejects(
+    (input) => { input.assets[0].placement.scope = "workspace"; },
+    /scope.*system, user-home/u,
+  );
+  rejects(
     (input) => { input.assets[0].placement.path = "../credential"; },
     /normalized relative path/u,
   );
@@ -63,6 +108,29 @@ test("local and target paths fail independently", () => {
         "/home/my-user/key";
     },
     /normalized relative path/u,
+  );
+});
+
+test("resource and provider identifiers fail independently", () => {
+  rejects(
+    (input) => { input.assets[0].id = "Agent Config"; },
+    /assets\[0\]\.id.*lowercase identifier/u,
+  );
+  rejects(
+    (input) => { input.prompts[0].id = "Install Profile"; },
+    /prompts\[0\]\.id.*lowercase identifier/u,
+  );
+  rejects(
+    (input) => { input.account.initialPassword.id = "Account Password"; },
+    /initialPassword\.id.*lowercase identifier/u,
+  );
+  rejects(
+    (input) => { input.steps[2].command.executable.id = "Setup Script"; },
+    /executable\.id.*lowercase identifier/u,
+  );
+  rejects(
+    (input) => { input.providers[0].id = "Codex Provider"; },
+    /providers\[0\]\.id.*lowercase identifier/u,
   );
 });
 
@@ -98,6 +166,52 @@ test("environment fields and each parameterized step reject invalid values", () 
   rejects(
     (input) => { input.providers[0].promptTransport = "file"; },
     /promptTransport.*stdin/u,
+  );
+  rejects(
+    (input) => { input.providers[0].command.executable = ""; },
+    /providers\[0\]\.command\.executable.*1-256/u,
+  );
+  rejects(
+    (input) => { input.providers[0].command.arguments = [null]; },
+    /providers\[0\]\.command\.arguments\[0\].*string/u,
+  );
+  rejects(
+    (input) => { input.steps[3].completionCheck.executable = ""; },
+    /completionCheck\.executable.*1-256/u,
+  );
+  rejects(
+    (input) => {
+      input.steps[3].completionCheck.workingDirectory = {
+        scope: "workspace",
+        path: "tmp",
+      };
+    },
+    /completionCheck\.workingDirectory\.scope.*system, user-home/u,
+  );
+});
+
+test("empty and oversized arrays fail at their independent limits", () => {
+  rejects((input) => { input.steps = []; }, /steps.*1-10000 items/u);
+  rejects(
+    (input) => { input.assets = Array(10_001).fill(input.assets[0]); },
+    /assets.*0-10000 items/u,
+  );
+  rejects(
+    (input) => { input.steps[2].command.arguments = Array(257).fill(""); },
+    /command\.arguments.*0-256 items/u,
+  );
+  rejects(
+    (input) => {
+      input.prompts[0].variables = Array.from(
+        { length: 129 },
+        (_, index) => `variable-${String(index)}`,
+      );
+    },
+    /prompts\[0\]\.variables.*0-128 items/u,
+  );
+  rejects(
+    (input) => { input.steps[6].variables = Array(129).fill(input.steps[6].variables[0]); },
+    /steps\[6\]\.variables.*0-128 items/u,
   );
 });
 
@@ -135,6 +249,55 @@ test("secret references stay structural and reject unknown material fields", () 
       input.steps[6].variables[1].source.secret.id = "app-key";
     },
     /Conflicting local sources for secret "app-key"/u,
+  );
+  rejects(
+    (input) => { input.steps[5].secretId = "app-key"; },
+    /steps\[5\].*exactly one of "secret" or "secretId"/u,
+  );
+  rejects(
+    (input) => { input.steps[6].variables[1].source.secretId = "app-key"; },
+    /source.*exactly one of "secret" or "secretId"/u,
+  );
+});
+
+test("unknown fields fail closed at nested object boundaries", () => {
+  rejects(
+    (input) => { input.agent.description = "future"; },
+    /agent\.description.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.operatingSystem.compatibility.release = "future"; },
+    /compatibility\.release.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.network.wifi.hidden = true; },
+    /wifi\.hidden.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.assets[0].placement.mode = "0600"; },
+    /placement\.mode.*Unknown field/u,
+  );
+  rejects(
+    (input) => {
+      input.assets[0].source = {
+        kind: "local",
+        url: "file:///workspace/definitions/assets/agent.json",
+        digest: "future",
+      };
+    },
+    /source\.digest.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.providers[0].command.timeout = 30; },
+    /providers\[0\]\.command\.timeout.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.steps[6].variables[0].source.default = "future"; },
+    /source\.default.*Unknown field/u,
+  );
+  rejects(
+    (input) => { input.steps[7].timeout = 30; },
+    /steps\[7\]\.timeout.*Unknown field/u,
   );
 });
 

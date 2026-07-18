@@ -223,6 +223,26 @@ export const parseRegisteredReference = <K extends "script" | "secret">(
   return reference;
 };
 
+export const parseExclusiveSecretReference = (
+  value: Record<string, unknown>,
+  registry: ResourceRegistry,
+  path: string,
+): SecretDefinition => {
+  const hasSecret = Object.hasOwn(value, "secret");
+  const hasSecretId = Object.hasOwn(value, "secretId");
+  if (hasSecret === hasSecretId) {
+    fail(path, 'Expected exactly one of "secret" or "secretId".');
+  }
+  return hasSecret
+    ? parseSecretReference(required(value, "secret", path), registry, `${path}.secret`)
+    : parseRegisteredReference(
+        { secretId: required(value, "secretId", path) },
+        "secret",
+        registry.secrets,
+        path,
+      );
+};
+
 export const parsePromptVariableSource = (
   input: unknown,
   registry: ResourceRegistry,
@@ -239,18 +259,7 @@ export const parsePromptVariableSource = (
   }
   if (kind === "secret") {
     const value = parseObject(input, path, ["kind", "secret", "secretId"]);
-    const reference = Object.hasOwn(value, "secret")
-      ? parseSecretReference(
-          required(value, "secret", path),
-          registry,
-          `${path}.secret`,
-        )
-      : parseRegisteredReference(
-          { secretId: value.secretId },
-          "secret",
-          registry.secrets,
-          path,
-        );
+    const reference = parseExclusiveSecretReference(value, registry, path);
     return {
       kind,
       secretId: reference.id,
