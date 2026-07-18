@@ -3,12 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Provider-neutral process contracts and adapters.",
+  "description": "Structured bounded-exec and managed-spawn contracts, adapters, and deterministic fakes.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist", "README.md"]
 }
