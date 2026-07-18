@@ -17,7 +17,10 @@ export interface StateFileStat {
 
 export interface StateFileSystem {
   lstat(path: string): Promise<StateFileStat>;
-  mkdir(path: string, options: { readonly mode: number; readonly recursive: true }): Promise<unknown>;
+  mkdir(
+    path: string,
+    options: { readonly mode: number; readonly recursive: true },
+  ): Promise<string | undefined>;
   open(path: string, flags: number, mode?: number): Promise<StateFileHandle>;
   readFile(path: string, encoding: "utf8"): Promise<string>;
   readdir(path: string): Promise<string[]>;
@@ -30,7 +33,10 @@ export class NodeStateFileSystem implements StateFileSystem {
     return lstat(path);
   }
 
-  mkdir(path: string, options: { readonly mode: number; readonly recursive: true }): Promise<unknown> {
+  mkdir(
+    path: string,
+    options: { readonly mode: number; readonly recursive: true },
+  ): Promise<string | undefined> {
     return mkdir(path, options);
   }
 

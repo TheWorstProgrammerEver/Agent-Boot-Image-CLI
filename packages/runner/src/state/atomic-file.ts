@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { StateFileHandle, StateFileSystem } from "./filesystem.js";
 
@@ -81,6 +81,33 @@ export const syncDirectory = async (
   }
 };
 
+const createdEntryParents = (firstCreated: string, directory: string): readonly string[] => {
+  const first = resolve(firstCreated);
+  const target = resolve(directory);
+  const remainder = relative(first, target);
+  if (remainder === ".." || remainder.startsWith(`..${sep}`) || isAbsolute(remainder)) {
+    throw new Error("mkdir returned a path outside the checkpoint directory");
+  }
+
+  const created = [first];
+  for (const segment of remainder.split(sep).filter(Boolean)) {
+    created.push(join(created.at(-1) as string, segment));
+  }
+  return created.map(dirname);
+};
+
+const syncCheckpointDirectoryEntry = async (
+  fileSystem: StateFileSystem,
+  directory: string,
+  firstCreated: string | undefined,
+): Promise<void> => {
+  const parents =
+    firstCreated === undefined
+      ? [dirname(resolve(directory))]
+      : createdEntryParents(firstCreated, directory);
+  for (const parent of parents) await syncDirectory(fileSystem, parent);
+};
+
 const tempPrefixFor = (path: string): string => `.${basename(path)}.`;
 
 export const cleanupCheckpointTemps = async (
@@ -111,8 +138,11 @@ export const writeFileAtomically = async (
   expectedOwner: number,
 ): Promise<void> => {
   const directory = dirname(path);
-  await fileSystem.mkdir(directory, { mode: 0o700, recursive: true });
+  const firstCreated = await fileSystem.mkdir(directory, { mode: 0o700, recursive: true });
   await requireTrustedCheckpointDirectory(fileSystem, path, expectedOwner);
+  // A directory's own fsync does not persist its name in the containing directory. Sync every
+  // parent that gained an entry, or the immediate parent on retry after an interrupted sync.
+  await syncCheckpointDirectoryEntry(fileSystem, directory, firstCreated);
   const temporaryPath = join(
     directory,
     `${tempPrefixFor(path)}${String(process.pid)}.${randomUUID()}.tmp`,
