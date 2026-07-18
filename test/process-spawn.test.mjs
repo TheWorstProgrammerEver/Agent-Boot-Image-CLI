@@ -221,16 +221,17 @@ test('managed cancellation removes a resistant descendant process', async () => 
 test('managed leader exit removes a resistant descendant holding streamed output open', async () => {
   let output = '';
   const descendant = [
-    "process.on('SIGTERM', () => { process.stdout.write('descendant-terminated\\n'); });",
-    'process.send?.(String(process.pid));',
+    "const { writeSync } = require('node:fs');",
+    "process.on('SIGTERM', () => { writeSync(1, 'descendant-terminated\\n'); });",
+    "writeSync(1, 'pid:' + String(process.pid) + '\\n');",
+    "writeSync(3, 'ready');",
     'setInterval(() => {}, 1000);',
   ].join('');
   const leader = [
     "const { spawn } = require('node:child_process');",
-    `const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore', 1, 2, 'ipc'] });`,
-    "child.once('message', pid => {",
-    "process.stdout.write('pid:' + String(pid) + '\\n');",
-    'child.disconnect();',
+    `const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore', 1, 2, 'pipe'] });`,
+    "child.stdio[3].once('data', () => {",
+    'child.stdio[3].destroy();',
     'child.unref();',
     '});',
   ].join('');
