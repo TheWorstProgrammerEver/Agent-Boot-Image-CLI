@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "definitionUrl": "file:///workspace/examples/definitive-agent/definition.ts",
+  "agent": {
+    "id": "my-agent",
+    "displayName": "My Agent"
+  },
+  "operatingSystem": {
+    "catalogId": "raspberry-pi-os-lite-trixie-arm64",
+    "compatibility": {
+      "architecture": "arm64",
+      "boards": [
+        "raspberry-pi-5"
+      ]
+    }
+  },
+  "account": {
+    "username": "my-user",
+    "initialPassword": {
+      "secretId": "account-authentication"
+    }
+  },
+  "network": {
+    "hostname": "my-agent",
+    "wifi": {
+      "ssid": "<network-ssid>",
+      "passphrase": {
+        "secretId": "network-authentication"
+      }
+    }
+  },
+  "assets": [],
+  "prompts": [
+    {
+      "kind": "prompt",
+      "id": "bootstrap-agent",
+      "source": {
+        "kind": "local",
+        "url": "file:///workspace/examples/definitive-agent/prompts/bootstrap-agent.md"
+      },
+      "variables": [
+        "agent-name"
+      ]
+    }
+  ],
+  "scripts": [],
+  "secrets": [
+    {
+      "kind": "secret",
+      "id": "account-authentication",
+      "source": {
+        "kind": "local",
+        "url": "file:///workspace/examples/definitive-agent/secrets/account-authentication"
+      }
+    },
+    {
+      "kind": "secret",
+      "id": "network-authentication",
+      "source": {
+        "kind": "local",
+        "url": "file:///workspace/examples/definitive-agent/secrets/network-authentication"
+      }
+    },
+    {
+      "kind": "secret",
+      "id": "repository-credential",
+      "source": {
+        "kind": "local",
+        "url": "file:///workspace/examples/definitive-agent/secrets/repository-credential"
+      }
+    }
+  ],
+  "providers": [
+    {
+      "id": "codex",
+      "command": {
+        "executable": "codex",
+        "arguments": [
+          "exec",
+          "-"
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
+      },
+      "promptTransport": "stdin"
+    }
+  ],
+  "steps": [
+    {
+      "id": "set-agent-name",
+      "kind": "environment",
+      "operation": "set",
+      "key": "AGENT_NAME",
+      "value": "My Agent"
+    },
+    {
+      "id": "enter-bootstrap-mode",
+      "kind": "environment",
+      "operation": "set",
+      "key": "BOOTSTRAP_MODE",
+      "value": "true"
+    },
+    {
+      "id": "install-codex",
+      "kind": "automatic",
+      "command": {
+        "executable": "npm",
+        "arguments": [
+          "install",
+          "--global",
+          "@openai/codex@<reviewed-version>"
+        ]
+      }
+    },
+    {
+      "id": "configure-codex-yolo-profile",
+      "kind": "automatic",
+      "command": {
+        "executable": "agent-boot-configure-codex",
+        "arguments": [
+          "--sandbox-mode",
+          "danger-full-access",
+          "--approval-policy",
+          "never",
+          "--working-root",
+          "/home/my-user/workspace"
+        ]
+      }
+    },
+    {
+      "id": "verify-codex-yolo-profile",
+      "kind": "automatic",
+      "command": {
+        "executable": "agent-boot-verify-codex",
+        "arguments": [
+          "--sandbox-mode",
+          "danger-full-access",
+          "--approval-policy",
+          "never"
+        ]
+      }
+    },
+    {
+      "id": "authenticate-codex",
+      "kind": "manual",
+      "command": {
+        "executable": "codex",
+        "arguments": [
+          "login",
+          "--device-auth"
+        ]
+      },
+      "completionCheck": {
+        "executable": "codex",
+        "arguments": [
+          "login",
+          "status"
+        ]
+      },
+      "pollIntervalSeconds": 2
+    },
+    {
+      "id": "start-agent-support-service",
+      "kind": "fire-and-forget",
+      "command": {
+        "executable": "agent-support-service",
+        "arguments": [
+          "--foreground"
+        ]
+      },
+      "lifetime": "runner"
+    },
+    {
+      "id": "install-repository-credential",
+      "kind": "install-user-secret",
+      "secretId": "repository-credential",
+      "destination": ".config/repository/credential"
+    },
+    {
+      "id": "leave-bootstrap-mode",
+      "kind": "environment",
+      "operation": "unset",
+      "key": "BOOTSTRAP_MODE"
+    },
+    {
+      "id": "render-bootstrap-prompt",
+      "kind": "prompt",
+      "templateId": "bootstrap-agent",
+      "renderedPromptId": "bootstrap-prompt",
+      "retention": "ephemeral",
+      "variables": [
+        {
+          "name": "agent-name",
+          "source": {
+            "kind": "environment",
+            "key": "AGENT_NAME"
+          }
+        }
+      ]
+    },
+    {
+      "id": "run-codex-bootstrap",
+      "kind": "provider",
+      "providerId": "codex",
+      "renderedPromptId": "bootstrap-prompt"
+    }
+  ]
+}
