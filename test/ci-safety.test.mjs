@@ -16,6 +16,7 @@ test("CI stays inside an unprivileged, non-device container", async () => {
   ];
 
   assert.match(workflow, /image: node:24-bookworm/u);
+  assert.match(workflow, /--user 1001:122/u);
   assert.match(workflow, /--cap-drop=ALL/u);
   assert.match(workflow, /--security-opt=no-new-privileges/u);
   assert.match(workflow, /npm ci --ignore-scripts/u);
