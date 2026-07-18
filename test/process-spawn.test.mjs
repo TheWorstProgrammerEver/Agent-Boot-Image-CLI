@@ -11,6 +11,7 @@ import { CommandStartError, NodeSpawnAdapter } from '@agent-boot/process';
 import {
   executableNode,
   processExists,
+  processIsRunning,
   waitFor,
 } from '../test-support/process-test-helpers.mjs';
 
@@ -251,8 +252,8 @@ test('managed leader exit removes a resistant descendant holding streamed output
 
     assert.deepEqual(result, { exitCode: 0, reason: 'exit', signal: null });
     assert.equal(output, `pid:${String(descendantPid)}\ndescendant-terminated\n`);
-    await waitFor(() => !processExists(descendantPid));
-    assert.equal(processExists(descendantPid), false);
+    await waitFor(() => !processIsRunning(descendantPid));
+    assert.equal(processIsRunning(descendantPid), false);
   } finally {
     if (running.pid !== undefined) {
       try {

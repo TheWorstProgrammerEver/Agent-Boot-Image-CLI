@@ -1,4 +1,5 @@
 import { exec } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -40,6 +41,19 @@ export const processExists = (pid) => {
     return true;
   } catch (error) {
     if (error.code === 'ESRCH') return false;
+    throw error;
+  }
+};
+
+export const processIsRunning = (pid) => {
+  if (!processExists(pid)) return false;
+  if (process.platform !== 'linux') return true;
+
+  try {
+    const stat = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+    return stat.at(stat.lastIndexOf(')') + 2) !== 'Z';
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
     throw error;
   }
 };
