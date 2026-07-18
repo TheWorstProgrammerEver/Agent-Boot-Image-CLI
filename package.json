@@ -11,12 +11,13 @@
   },
   "scripts": {
     "build": "tsc --build --pretty false",
-    "check": "npm run lint && npm run typecheck && npm run check:boundaries",
+    "check": "npm run lint && npm run typecheck && npm run typecheck:fixtures && npm run check:boundaries",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
     "clean": "tsc --build --clean",
     "lint": "eslint . --max-warnings 0",
     "pretest": "npm run build",
     "test": "node --test",
+    "typecheck:fixtures": "tsc --project packages/definition/tsconfig.type-tests.json --pretty false",
     "typecheck": "tsc --project tsconfig.typecheck.json --pretty false"
   },
   "devDependencies": {
