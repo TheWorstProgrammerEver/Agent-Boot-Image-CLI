@@ -18,10 +18,14 @@ cancellation, and difficult-to-fake behavior.
 2. spawned processes with structured arguments, streaming, signals, cancellation,
    and optional inherited terminal behavior.
 
-Neither adapter invokes a shell by default. Callers pass an executable and an
-argument array. Process output crosses the shared redaction boundary before it is
-logged or persisted. Tests use a fake command host implementing the same narrow
-contracts; OS adapters depend on those contracts rather than Node process APIs.
+Callers pass an executable and an argument array rather than interpolating a
+shell command. The spawn adapter always invokes `spawn()` with `shell: false`.
+The bounded adapter safely quotes that structured descriptor for the separately
+versioned, POSIX-only Typescript-Bash implementation; raw shell strings are not
+part of the shared command-host contract. Process output crosses the shared
+redaction boundary before it is logged or persisted. Tests use a fake command
+host implementing the same narrow contracts; OS adapters depend on those
+contracts rather than Node process APIs.
 
 ## Consequences
 
