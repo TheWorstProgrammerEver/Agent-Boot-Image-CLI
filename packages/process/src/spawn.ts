@@ -124,15 +124,23 @@ export class NodeSpawnAdapter implements SpawnHost {
 
     let requestedReason: 'canceled' | 'timeout' | undefined;
     let termination: Promise<void> | undefined;
+    let leaderExited = false;
     let settled = false;
     let timeout: NodeJS.Timeout | undefined;
     const signalListeners = new Map<NodeJS.Signals, () => void>();
 
     const beginTermination = (reason: 'canceled' | 'timeout', signal: NodeJS.Signals): void => {
-      if (settled || requestedReason !== undefined) return;
+      if (leaderExited || settled || requestedReason !== undefined) return;
       requestedReason = reason;
       if (timeout !== undefined) clearTimeout(timeout);
       termination = terminateProcessGroup(child, signal, this.#terminationGraceMs);
+    };
+
+    const beginManagedCleanup = (): void => {
+      if (termination !== undefined || command.lifetime.policy !== 'managed') return;
+      if (processGroupExists(child)) {
+        termination = terminateProcessGroup(child, 'SIGTERM', this.#terminationGraceMs);
+      }
     };
 
     const cancel = (signal: NodeJS.Signals = 'SIGTERM'): void => {
@@ -175,9 +183,16 @@ export class NodeSpawnAdapter implements SpawnHost {
 
     const completion = new Promise<SpawnResult>((resolve, reject) => {
       child.once('error', (error) => {
+        if (leaderExited || settled) return;
         settled = true;
         cleanup();
         reject(new CommandStartError(formatCommand(command, this.#redactor), errorCode(error)));
+      });
+      child.once('exit', () => {
+        if (settled) return;
+        leaderExited = true;
+        cleanup();
+        beginManagedCleanup();
       });
       child.once('close', (exitCode, signal) => {
         if (settled) return;
@@ -185,10 +200,8 @@ export class NodeSpawnAdapter implements SpawnHost {
         const completionReason = requestedReason;
         cleanup();
         void (async () => {
+          beginManagedCleanup();
           if (termination !== undefined) await termination;
-          else if (command.lifetime.policy === 'managed' && processGroupExists(child)) {
-            await terminateProcessGroup(child, 'SIGTERM', this.#terminationGraceMs);
-          }
           resolve({ exitCode, reason: resolvedReason(completionReason, exitCode, signal), signal });
         })().catch(reject);
       });
@@ -198,7 +211,7 @@ export class NodeSpawnAdapter implements SpawnHost {
       cancel,
       completion,
       pid: child.pid,
-      sendSignal: signal => settled ? false : signalProcessGroup(child, signal),
+      sendSignal: signal => leaderExited || settled ? false : signalProcessGroup(child, signal),
     };
   }
 }

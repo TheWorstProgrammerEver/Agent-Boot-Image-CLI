@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import process from 'node:process';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { CommandStartError, NodeSpawnAdapter } from '@agent-boot/process';
 
@@ -214,4 +216,49 @@ test('managed cancellation removes a resistant descendant process', async () => 
   assert.equal(result.reason, 'canceled');
   await waitFor(() => !processExists(descendantPid));
   assert.equal(processExists(descendantPid), false);
+});
+
+test('managed leader exit removes a resistant descendant holding streamed output open', async () => {
+  let output = '';
+  const descendant = [
+    "process.on('SIGTERM', () => { process.stdout.write('descendant-terminated\\n'); });",
+    'process.send?.(String(process.pid));',
+    'setInterval(() => {}, 1000);',
+  ].join('');
+  const leader = [
+    "const { spawn } = require('node:child_process');",
+    `const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: ['ignore', 1, 2, 'ipc'] });`,
+    "child.once('message', pid => {",
+    "process.stdout.write('pid:' + String(pid) + '\\n');",
+    'child.disconnect();',
+    'child.unref();',
+    '});',
+  ].join('');
+  const running = new NodeSpawnAdapter({ terminationGraceMs: 30 }).spawn(streamedCommand(leader, {
+    onOutput: chunk => { output += Buffer.from(chunk.data).toString(); },
+  }));
+
+  try {
+    await waitFor(() => /^pid:\d+\n/u.test(output));
+    const descendantPid = Number.parseInt(output.slice(4), 10);
+    const result = await Promise.race([
+      running.completion,
+      delay(1_000, undefined, { ref: false }).then(() => {
+        throw new Error('managed completion did not settle');
+      }),
+    ]);
+
+    assert.deepEqual(result, { exitCode: 0, reason: 'exit', signal: null });
+    assert.equal(output, `pid:${String(descendantPid)}\ndescendant-terminated\n`);
+    await waitFor(() => !processExists(descendantPid));
+    assert.equal(processExists(descendantPid), false);
+  } finally {
+    if (running.pid !== undefined) {
+      try {
+        process.kill(-running.pid, 'SIGKILL');
+      } catch (error) {
+        assert.equal(error.code, 'ESRCH');
+      }
+    }
+  }
 });
