@@ -148,6 +148,10 @@ test("environment fields and each parameterized step reject invalid values", () 
     /arguments.*array/u,
   );
   rejects(
+    (input) => { input.steps[3].command.arguments = ["x".repeat(1025)]; },
+    /command\.arguments\[0\].*0-1024 characters/u,
+  );
+  rejects(
     (input) => { input.steps[2].command.executable = ""; },
     /executable.*1-256/u,
   );

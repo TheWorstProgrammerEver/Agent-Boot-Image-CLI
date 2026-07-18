@@ -13,6 +13,8 @@ import {
   required,
 } from "./validation.js";
 
+const MAX_COMMAND_ARGUMENT_LENGTH = 1024;
+
 export type CommandExecutableInput = string | ScriptInput;
 export type CommandExecutable = string | { scriptId: string };
 
@@ -62,7 +64,10 @@ export const parseCommand = (
       required(value, "arguments", path),
       `${path}.arguments`,
       (argument, argumentPath) =>
-        parseString(argument, argumentPath, { minLength: 0, maxLength: 4096 }),
+        parseString(argument, argumentPath, {
+          minLength: 0,
+          maxLength: MAX_COMMAND_ARGUMENT_LENGTH,
+        }),
       { maxLength: 256 },
     ),
     ...(workingDirectory === undefined

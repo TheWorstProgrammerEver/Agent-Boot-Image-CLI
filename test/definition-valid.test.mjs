@@ -6,6 +6,7 @@ import {
   agentDefinitionSchema,
   defineAgent,
 } from "../packages/definition/dist/index.js";
+import { runnerPlanSchema } from "../packages/protocol/dist/index.js";
 import { validDefinitionInput } from "../test-support/definition-fixtures.mjs";
 
 test("builders create one canonical definition with every ordered step variant", () => {
@@ -70,4 +71,19 @@ test("canonical definitions are JSON-safe and survive canonical validation", () 
   assert.deepEqual(roundTripped, definition);
   assert.deepEqual(agentDefinitionSchema.parse(roundTripped), definition);
   assert.doesNotMatch(serialized, /contents|materialized|not-a-real-secret/u);
+});
+
+test("accepted command arguments satisfy the canonical runner-plan boundary", () => {
+  const input = validDefinitionInput();
+  input.steps[3].command.arguments = ["x".repeat(1024)];
+  const definition = defineAgent(input);
+  const manualStep = definition.steps.find((step) => step.kind === "manual");
+
+  assert.ok(manualStep);
+  assert.doesNotThrow(() => runnerPlanSchema.parse({
+    schemaVersion: 1,
+    agentId: definition.agent.id,
+    providers: [],
+    steps: [manualStep],
+  }));
 });
