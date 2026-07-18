@@ -4,15 +4,19 @@
   "private": true,
   "type": "module",
   "description": "Host-side Agent Boot command-line composition root.",
+  "bin": {
+    "create-agent": "./dist/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "dependencies": {
     "@agent-boot/assembly": "0.0.0",
+    "@agent-boot/definition": "0.0.0",
     "@agent-boot/os-linux": "0.0.0",
     "@agent-boot/process": "0.0.0",
     "@agent-boot/protocol": "0.0.0",

@@ -8,6 +8,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../assembly" },
+    { "path": "../definition" },
     { "path": "../synth" },
     { "path": "../process" },
     { "path": "../protocol" },

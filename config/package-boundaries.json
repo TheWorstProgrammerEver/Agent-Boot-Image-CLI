@@ -8,6 +8,6 @@
     "process": [],
     "os-linux": ["process", "protocol"],
     "runner": ["process", "protocol"],
-    "cli": ["assembly", "os-linux", "process", "protocol", "runner", "synth"]
+    "cli": ["assembly", "definition", "os-linux", "process", "protocol", "runner", "synth"]
   }
 }
