@@ -28,6 +28,19 @@ export interface WriteAssemblyOptions {
   readonly hooks?: AssemblyWriteHooks;
 }
 
+export class AssemblyRecoveryError extends Error {
+  readonly recoveryPath: string;
+
+  constructor(recoveryPath: string) {
+    super(
+      "Assembly replacement and rollback both failed; " +
+      "the previous assembly remains available at the recovery path.",
+    );
+    this.name = "AssemblyRecoveryError";
+    this.recoveryPath = recoveryPath;
+  }
+}
+
 const isMissing = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ENOENT";
 
@@ -148,16 +161,24 @@ export const writeAssemblyAtomically = async (
     await options.hooks?.beforeCommit?.();
 
     if (outputState === "directory") {
-      backupPath = await mkdtemp(join(parentPath, `.${basename(outputPath)}.backup-`));
-      await rm(backupPath, { recursive: true, force: true });
-      await rename(outputPath, backupPath);
+      const replacementBackupPath = await mkdtemp(
+        join(parentPath, `.${basename(outputPath)}.backup-`),
+      );
+      backupPath = replacementBackupPath;
+      await rm(replacementBackupPath, { recursive: true, force: true });
+      await rename(outputPath, replacementBackupPath);
       try {
         await options.hooks?.afterExistingMoved?.();
         await rename(stagingPath, outputPath);
-      } catch (error) {
-        await rename(backupPath, outputPath);
-        backupPath = undefined;
-        throw error;
+      } catch (replacementError) {
+        try {
+          await rename(replacementBackupPath, outputPath);
+          backupPath = undefined;
+        } catch {
+          backupPath = undefined;
+          throw new AssemblyRecoveryError(replacementBackupPath);
+        }
+        throw replacementError;
       }
     } else {
       await rename(stagingPath, outputPath);

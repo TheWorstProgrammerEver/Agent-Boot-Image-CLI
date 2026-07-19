@@ -3,6 +3,7 @@ export {
   canonicalJsonBytes,
 } from "./canonical-json.js";
 export {
+  AssemblyRecoveryError,
   writeAssemblyAtomically,
   type AssemblyFile,
   type AssemblyWriteHooks,

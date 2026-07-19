@@ -3,11 +3,12 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 import { URL, pathToFileURL } from "node:url";
 
 import {
+  AssemblyRecoveryError,
   canonicalJson,
   writeAssemblyAtomically,
 } from "../packages/assembly/dist/index.js";
@@ -252,6 +253,49 @@ test("deterministic redacted assembly synthesis", async (context) => {
 
       await writeAssemblyAtomically(output, assembly.files, { replace: true });
       assert.equal(await readFile(join(output, "manifest.json"), "utf8"), canonicalJson(assembly.documents.manifest));
+    });
+
+    await context.test("preserves the prior assembly when replacement rollback fails", async () => {
+      const assembly = await synthesizeAssembly(fixture.definition, { osLock, runnerArtifacts });
+      const output = join(root, "rollback-failure-output");
+      await mkdir(output);
+      await Promise.all([
+        writeFile(join(output, "preserved.txt"), "preserved", "utf8"),
+        writeFile(join(output, "manifest.json"), "old manifest", "utf8"),
+        writeFile(join(output, "runner-plan.json"), "old plan", "utf8"),
+        writeFile(join(output, "os-lock.json"), "old lock", "utf8"),
+      ]);
+
+      let recoveryPath;
+      await assert.rejects(
+        writeAssemblyAtomically(output, assembly.files, {
+          replace: true,
+          hooks: {
+            afterExistingMoved: async () => {
+              await mkdir(output);
+              await writeFile(join(output, "interloper.txt"), "interloper", "utf8");
+              throw new Error("injected replacement failure");
+            },
+          },
+        }),
+        (error) => {
+          assert.ok(error instanceof AssemblyRecoveryError);
+          recoveryPath = error.recoveryPath;
+          return true;
+        },
+      );
+
+      assert.equal(await readFile(join(output, "interloper.txt"), "utf8"), "interloper");
+      assert.equal(await readFile(join(recoveryPath, "preserved.txt"), "utf8"), "preserved");
+      assert.match(recoveryPath, /\.rollback-failure-output\.backup-/u);
+      assert.deepEqual(
+        (await readdir(root)).filter((name) => name.includes(".staging-")),
+        [],
+      );
+      assert.deepEqual(
+        (await readdir(root)).filter((name) => name.includes(".backup-")),
+        [basename(recoveryPath)],
+      );
     });
   } finally {
     await rm(root, { recursive: true, force: true });
