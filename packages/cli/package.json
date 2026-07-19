@@ -11,12 +11,17 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./images": {
+      "types": "./dist/images/index.d.ts",
+      "default": "./dist/images/index.js"
     }
   },
   "files": ["dist", "README.md"],
   "dependencies": {
     "@agent-boot/assembly": "0.0.0",
     "@agent-boot/definition": "0.0.0",
+    "@agent-boot/os-adapters": "0.0.0",
     "@agent-boot/os-linux": "0.0.0",
     "@agent-boot/process": "0.0.0",
     "@agent-boot/protocol": "0.0.0",
