@@ -84,7 +84,6 @@ export const createLockOwnerIdentity = async (): Promise<string> => {
 };
 
 export const lockOwnerIsAlive = async (identity: string): Promise<boolean> => {
-  if (identity.length === 0) return true;
   const owner = parseOwner(identity);
   if (owner === undefined) return false;
   try {

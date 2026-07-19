@@ -1,4 +1,5 @@
-import { open, readFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { link, open, readFile, rm } from "node:fs/promises";
 
 import { ArtifactAcquisitionError } from "./errors.js";
 import { createLockOwnerIdentity, lockOwnerIsAlive } from "./lock-owner.js";
@@ -11,6 +12,27 @@ const delay = (milliseconds: number): Promise<void> =>
 const errorCode = (error: unknown): string | undefined =>
   (error as NodeJS.ErrnoException).code;
 
+const prepareLockCandidate = async (path: string, identity: string): Promise<string> => {
+  const candidate = `${path}.${randomUUID()}.pending`;
+  try {
+    const handle = await open(candidate, "wx", 0o600);
+    try {
+      await handle.writeFile(identity, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    return candidate;
+  } catch {
+    try {
+      await rm(candidate, { force: true });
+    } catch {
+      // The candidate never controls lock ownership, so stale residue cannot block acquisition.
+    }
+    throw new ArtifactAcquisitionError("cache-access");
+  }
+};
+
 const tryAcquireOwnedLock = async (path: string): Promise<ReleaseLock | undefined> => {
   let identity;
   try {
@@ -19,19 +41,18 @@ const tryAcquireOwnedLock = async (path: string): Promise<ReleaseLock | undefine
     throw new ArtifactAcquisitionError("cache-access");
   }
 
-  let handle;
+  const candidate = await prepareLockCandidate(path, identity);
   try {
-    handle = await open(path, "wx", 0o600);
+    await link(candidate, path);
   } catch (error) {
     if (errorCode(error) === "EEXIST") return undefined;
     throw new ArtifactAcquisitionError("cache-access");
-  }
-
-  try {
-    await handle.writeFile(identity, "utf8");
-    await handle.sync();
   } finally {
-    await handle.close();
+    try {
+      await rm(candidate, { force: true });
+    } catch {
+      // A fully initialized lock is already visible or another owner won the race.
+    }
   }
 
   return async () => {
