@@ -4,6 +4,7 @@ import {
   InvalidDefinitionError,
 } from "./validation-errors.js";
 import { loadTrustedDefinition } from "./trusted-definition-loader.js";
+import { runSynthCommand } from "./synth-command.js";
 
 export const VALIDATION_EXIT_CODE = {
   valid: 0,
@@ -13,8 +14,18 @@ export const VALIDATION_EXIT_CODE = {
   usage: 64,
 } as const;
 
+export const CREATE_AGENT_EXIT_CODE = {
+  ...VALIDATION_EXIT_CODE,
+  invalidSynthesisInput: 5,
+  outputExists: 6,
+  synthesisFailure: 7,
+} as const;
+
 export type ValidationExitCode =
   typeof VALIDATION_EXIT_CODE[keyof typeof VALIDATION_EXIT_CODE];
+
+export type CreateAgentExitCode =
+  typeof CREATE_AGENT_EXIT_CODE[keyof typeof CREATE_AGENT_EXIT_CODE];
 
 export interface CommandIo {
   readonly stdout: (line: string) => void;
@@ -30,15 +41,25 @@ const locationSuffix = (error: DefinitionLoaderError): string =>
 export const runCreateAgent = async (
   arguments_: readonly string[],
   io: CommandIo,
-): Promise<ValidationExitCode> => {
-  if (arguments_.length !== 2 || arguments_[0] !== "validate") {
-    io.stderr("Usage: create-agent validate <definition.ts>");
+): Promise<CreateAgentExitCode> => {
+  if (arguments_[0] === "synth") {
+    io.stderr(TRUST_WARNING);
+    return runSynthCommand(arguments_.slice(1), io);
+  }
+
+  const definitionPath = arguments_.length === 2 && arguments_[0] === "validate"
+    ? arguments_[1]
+    : arguments_.length === 3 && arguments_[0] === "validate" && arguments_[1] === "--definition"
+      ? arguments_[2]
+      : undefined;
+  if (definitionPath === undefined) {
+    io.stderr("Usage: create-agent validate [--definition] <definition.ts>");
     return VALIDATION_EXIT_CODE.usage;
   }
 
   io.stderr(TRUST_WARNING);
   try {
-    const loaded = await loadTrustedDefinition(arguments_[1] as string);
+    const loaded = await loadTrustedDefinition(definitionPath);
     io.stdout(`Definition valid: ${loaded.definitionPath}`);
     io.stdout(`Agent: ${loaded.definition.agent.id}`);
     io.stdout(`Schema version: ${String(loaded.definition.schemaVersion)}`);

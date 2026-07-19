@@ -1,0 +1,31 @@
+{
+  "agentId": "my-agent",
+  "providers": [],
+  "schemaVersion": 1,
+  "steps": [
+    {
+      "command": {
+        "arguments": [],
+        "executable": "/opt/agent-boot/scripts/prepare"
+      },
+      "id": "prepare",
+      "kind": "automatic"
+    },
+    {
+      "id": "render",
+      "kind": "prompt",
+      "renderedPromptId": "rendered-bootstrap",
+      "retention": "ephemeral",
+      "templateId": "bootstrap",
+      "variables": [
+        {
+          "name": "agent-name",
+          "source": {
+            "kind": "secret",
+            "secretId": "credential"
+          }
+        }
+      ]
+    }
+  ]
+}

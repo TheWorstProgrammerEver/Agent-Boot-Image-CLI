@@ -20,8 +20,10 @@
     "target": "ES2023",
     "types": ["node"],
     "paths": {
+      "@agent-boot/assembly": ["./packages/assembly/src/index.ts"],
       "@agent-boot/definition": ["./packages/definition/src/index.ts"],
-      "@agent-boot/protocol": ["./packages/protocol/src/index.ts"]
+      "@agent-boot/protocol": ["./packages/protocol/src/index.ts"],
+      "@agent-boot/synth": ["./packages/synth/src/index.ts"]
     },
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
