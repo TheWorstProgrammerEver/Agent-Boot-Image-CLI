@@ -290,6 +290,7 @@ export class RunnerEngine {
             step,
             environment,
             !pending.shouldCheckpointStart,
+            this.#cancellation,
             (progress) => {
               this.#emitManualProgress(checkpoint, progress);
             },

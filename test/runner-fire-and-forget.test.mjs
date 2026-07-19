@@ -34,6 +34,14 @@ const policy = {
   terminationGraceMs: 100,
 };
 
+const manualStep = () => ({
+  command: { arguments: ["--fixture"], executable: "manual-tool" },
+  completionCheck: { arguments: ["--fixture"], executable: "check-tool" },
+  id: "manual-gate",
+  kind: "manual",
+  pollIntervalSeconds: 1,
+});
+
 const seedPriorBootLaunch = async (fixture, identityHost, phase) => {
   const identity = identifyRunnerPlan(
     { agentId: "test-agent", schemaVersion: 1 },
@@ -209,6 +217,55 @@ test("runner cancellation forwards an allowed signal and leaves resumable state"
     const resumed = await fixture.createEngine({ cancellation: undefined }).run();
     assert.equal(resumed.status, "succeeded");
     assert.equal(resumed.state.fireAndForgetProcesses[0].generation, 2);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("runner cancellation during a manual gate stops foreground and accepted processes", async () => {
+  const controller = new globalThis.AbortController();
+  const identityHost = createIdentityHost();
+  const host = new ScriptedSpawnHost(identityHost)
+    .scriptRunning(601)
+    .scriptImmediate({ exitCode: 1, reason: "exit", signal: null })
+    .scriptRunning(602);
+  let markManualStarted;
+  const manualStarted = new Promise(resolve => {
+    markManualStarted = resolve;
+  });
+  const fixture = await createEngineFixture([fireAndForgetStep(), manualStep()], {
+    engineOptions: {
+      cancellation: controller.signal,
+      fireAndForgetPolicy: policy,
+      lifecycleWait: async () => undefined,
+      onProgress: progress => {
+        if (progress.status === "manual-waiting") markManualStarted();
+      },
+      processIdentityHost: identityHost,
+    },
+    host,
+  });
+  try {
+    const running = fixture.engine.run();
+    await manualStarted;
+    controller.abort("SIGINT");
+
+    await assert.rejects(running, RunnerInterruptedError);
+    assert.equal(host.spawnCalls[1].cancellation, controller.signal);
+    assert.equal(host.spawnCalls[2].cancellation, controller.signal);
+    assert.deepEqual(host.spawnCalls[2].control.cancelSignals, ["SIGTERM"]);
+    assert.deepEqual(host.spawnCalls[0].control.cancelSignals, ["SIGINT"]);
+
+    const identity = identifyRunnerPlan(
+      { agentId: "test-agent", schemaVersion: 1 },
+      fixture.serializedPlan,
+    );
+    const inspection = await fixture.store.inspect(identity);
+    assert.equal(inspection.status, "valid");
+    assert.equal(inspection.state.terminal, null);
+    assert.equal(inspection.state.currentStep.id, "manual-gate");
+    assert.equal(inspection.state.currentStep.phase, "started");
+    assert.equal(inspection.state.fireAndForgetProcesses[0].outcome, "runner-shutdown");
   } finally {
     await fixture.cleanup();
   }
