@@ -96,6 +96,17 @@ const createdEntryParents = (firstCreated: string, directory: string): readonly 
   return created.map(dirname);
 };
 
+const allEntryParents = (directory: string): readonly string[] => {
+  const parents: string[] = [];
+  let parent = dirname(resolve(directory));
+  parents.push(parent);
+  while (parent !== dirname(parent)) {
+    parent = dirname(parent);
+    parents.push(parent);
+  }
+  return parents.reverse();
+};
+
 const syncCheckpointDirectoryEntry = async (
   fileSystem: StateFileSystem,
   directory: string,
@@ -103,7 +114,7 @@ const syncCheckpointDirectoryEntry = async (
 ): Promise<void> => {
   const parents =
     firstCreated === undefined
-      ? [dirname(resolve(directory))]
+      ? allEntryParents(directory)
       : createdEntryParents(firstCreated, directory);
   for (const parent of parents) await syncDirectory(fileSystem, parent);
 };
@@ -141,7 +152,8 @@ export const writeFileAtomically = async (
   const firstCreated = await fileSystem.mkdir(directory, { mode: 0o700, recursive: true });
   await requireTrustedCheckpointDirectory(fileSystem, path, expectedOwner);
   // A directory's own fsync does not persist its name in the containing directory. Sync every
-  // parent that gained an entry, or the immediate parent on retry after an interrupted sync.
+  // parent that gained an entry. Recursive mkdir cannot report that chain on retry, so re-sync
+  // every resolved ancestor to the filesystem root before accepting the existing directory.
   await syncCheckpointDirectoryEntry(fileSystem, directory, firstCreated);
   const temporaryPath = join(
     directory,

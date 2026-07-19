@@ -93,39 +93,51 @@ test("recursive checkpoint-directory creation syncs every new parent entry", asy
 });
 
 for (const stage of ["before-sync", "after-sync"]) {
-  test(`interruption at ${stage} of the checkpoint-directory parent is retryable`, async () => {
-    const fixture = await createStateFixture();
-    try {
-      const parent = dirname(dirname(fixture.path));
-      const events = [];
-      let failed = false;
-      const fileSystem = new FaultInjectingStateFileSystem(event => {
-        events.push(event);
-        if (!failed && event.stage === stage && event.path === parent) {
-          failed = true;
-          throw injectedFailure();
+  for (const interruptedParentIndex of [0, 1]) {
+    test(`nested interruption at ${stage} of ancestor ${String(interruptedParentIndex + 1)} is retryable`, async () => {
+      const fixture = await createStateFixture();
+      try {
+        const path = join(fixture.root, "state", "nested", "runner-checkpoint.json");
+        const createdEntryParents = [fixture.root, join(fixture.root, "state")];
+        const interruptedParent = createdEntryParents[interruptedParentIndex];
+        const events = [];
+        let failed = false;
+        const fileSystem = new FaultInjectingStateFileSystem(event => {
+          events.push(event);
+          if (!failed && event.stage === stage && event.path === interruptedParent) {
+            failed = true;
+            throw injectedFailure();
+          }
+        });
+        const store = new RunnerStateStore({ clock: fixture.clock, fileSystem, path });
+
+        await assert.rejects(store.initialize(fixture.plan), StateAccessError);
+        assert.equal(
+          events.some(event => event.stage === "before-open" && isTemporary(event.path)),
+          false,
+        );
+        assert.deepEqual(await checkpointTempNames(path), []);
+
+        const retryStartedAt = events.length;
+        const initialized = await store.initialize(fixture.plan);
+        assert.equal(initialized.revision, 0);
+        const temporaryOpen = events.findIndex(
+          (event, index) =>
+            index >= retryStartedAt && event.stage === "before-open" && isTemporary(event.path),
+        );
+        for (const parent of createdEntryParents) {
+          const sync = events.findIndex(
+            (event, index) =>
+              index >= retryStartedAt && event.stage === "after-sync" && event.path === parent,
+          );
+          assert.ok(sync >= retryStartedAt);
+          assert.ok(sync < temporaryOpen);
         }
-      });
-      const store = new RunnerStateStore({ clock: fixture.clock, fileSystem, path: fixture.path });
-
-      await assert.rejects(store.initialize(fixture.plan), StateAccessError);
-      assert.equal(
-        events.some(event => event.stage === "before-open" && isTemporary(event.path)),
-        false,
-      );
-      assert.deepEqual(await checkpointTempNames(fixture.path), []);
-
-      const retryStartedAt = events.length;
-      const initialized = await store.initialize(fixture.plan);
-      assert.equal(initialized.revision, 0);
-      assert.ok(events.findIndex(
-        (event, index) =>
-          index >= retryStartedAt && event.stage === "after-sync" && event.path === parent,
-      ) >= retryStartedAt);
-    } finally {
-      await fixture.cleanup();
-    }
-  });
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  }
 }
 
 for (const stage of ["before-write", "after-write", "before-sync", "before-rename"]) {
