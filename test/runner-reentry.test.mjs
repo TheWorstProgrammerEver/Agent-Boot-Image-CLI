@@ -143,6 +143,61 @@ test("a persisted success is not repeated when interruption occurs after the che
   }
 });
 
+test("repeated recovery of one in-flight attempt cannot respawn beyond its budget", async () => {
+  const host = new FakeCommandHost().scriptSpawnResult(successfulSpawn);
+  const fixture = await createEngineFixture([automaticStep()], {
+    engineOptions: { automaticPolicy: { maxAttempts: 1, timeoutMs: 1_000 } },
+    host,
+  });
+  try {
+    const outcomePersistenceFailure = {
+      checkpointStep: (plan, checkpoint) => {
+        if (checkpoint.phase === "succeeded") {
+          throw new Error("simulated outcome persistence interruption");
+        }
+        return fixture.store.checkpointStep(plan, checkpoint);
+      },
+      initialize: plan => fixture.store.initialize(plan),
+      markFailed: (plan, diagnostic) => fixture.store.markFailed(plan, diagnostic),
+      markSucceeded: plan => fixture.store.markSucceeded(plan),
+    };
+    await assert.rejects(
+      fixture.createEngine({ stateStore: outcomePersistenceFailure }).run(),
+      /simulated outcome persistence interruption/u,
+    );
+    assert.equal(host.spawnCalls.length, 1);
+
+    const recoveryPersistenceFailure = {
+      ...outcomePersistenceFailure,
+      checkpointStep: (plan, checkpoint) => {
+        if (checkpoint.phase === "failed") {
+          throw new Error("simulated recovery persistence interruption");
+        }
+        return fixture.store.checkpointStep(plan, checkpoint);
+      },
+    };
+    for (let reboot = 0; reboot < 3; reboot += 1) {
+      await assert.rejects(
+        fixture.createEngine({ stateStore: recoveryPersistenceFailure }).run(),
+        /simulated recovery persistence interruption/u,
+      );
+    }
+    assert.equal(host.spawnCalls.length, 1);
+
+    const result = await fixture.engine.run();
+    assert.equal(result.status, "failed");
+    assert.equal(result.state.currentStep.attempt, 1);
+    assert.equal(result.state.currentStep.phase, "failed");
+    assert.equal(result.state.terminal.diagnostic.recovery, "manual-intervention");
+    assert.equal(host.spawnCalls.length, 1);
+
+    assert.equal((await fixture.engine.run()).status, "failed");
+    assert.equal(host.spawnCalls.length, 1);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("re-entry after the final allowed failure terminates without another command", async () => {
   const host = new FakeCommandHost();
   const fixture = await createEngineFixture([automaticStep()], {

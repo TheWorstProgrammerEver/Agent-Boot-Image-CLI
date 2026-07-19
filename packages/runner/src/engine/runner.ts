@@ -108,6 +108,22 @@ export class RunnerEngine {
 
       const step = this.#plan.steps[pending.index];
       if (step === undefined) throw new Error("Invariant violation: missing runner step");
+      if (!pending.shouldCheckpointStart && step.kind === "automatic") {
+        const interrupted: StepCheckpoint = {
+          attempt: pending.attempt,
+          id: step.id,
+          index: pending.index,
+          phase: "failed",
+        };
+        const failure = await this.#recordAttemptFailure(
+          interrupted,
+          { exitCode: null, signal: null },
+        );
+        state = failure.state;
+        if (failure.result !== undefined) return failure.result;
+        continue;
+      }
+
       let checkpoint: StepCheckpoint = {
         attempt: pending.attempt,
         id: step.id,
@@ -136,31 +152,45 @@ export class RunnerEngine {
 
       const environment = this.#environment.forStep(this.#plan.steps, pending.index);
       const attempt = await this.#automatic.execute(step, environment);
-      checkpoint = { ...checkpoint, phase: attempt.status };
-      state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
       if (attempt.status === "succeeded") {
+        checkpoint = { ...checkpoint, phase: "succeeded" };
+        state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
         this.#emitStepSucceeded(checkpoint);
         continue;
       }
-      const finalAttempt = checkpoint.attempt === this.#maxAttempts;
-      const diagnostic = attemptDiagnostic(
-        checkpoint,
-        attempt,
-        finalAttempt ? "manual-intervention" : "retry-step",
-      );
-      this.#emit({
-        attempt: checkpoint.attempt,
-        diagnostic,
-        index: checkpoint.index,
-        status: "step-failed",
-        stepId: checkpoint.id,
-      });
-      if (finalAttempt) {
-        state = await this.#stateStore.markFailed(this.#identity, diagnostic);
-        this.#emit({ diagnostic, status: "runner-failed" });
-        return { state, status: "failed" };
-      }
+      checkpoint = { ...checkpoint, phase: "failed" };
+      const failure = await this.#recordAttemptFailure(checkpoint, attempt);
+      state = failure.state;
+      if (failure.result !== undefined) return failure.result;
     }
+  }
+
+  async #recordAttemptFailure(
+    checkpoint: StepCheckpoint,
+    failure: { readonly exitCode: number | null; readonly signal: NodeJS.Signals | null },
+  ): Promise<{
+    readonly result?: RunnerExecutionResult;
+    readonly state: RunnerCheckpoint;
+  }> {
+    let state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
+    const finalAttempt = checkpoint.attempt >= this.#maxAttempts;
+    const diagnostic = attemptDiagnostic(
+      checkpoint,
+      failure,
+      finalAttempt ? "manual-intervention" : "retry-step",
+    );
+    this.#emit({
+      attempt: checkpoint.attempt,
+      diagnostic,
+      index: checkpoint.index,
+      status: "step-failed",
+      stepId: checkpoint.id,
+    });
+    if (!finalAttempt) return { state };
+
+    state = await this.#stateStore.markFailed(this.#identity, diagnostic);
+    this.#emit({ diagnostic, status: "runner-failed" });
+    return { result: { state, status: "failed" }, state };
   }
 
   #emit(progress: RunnerProgress): void {
