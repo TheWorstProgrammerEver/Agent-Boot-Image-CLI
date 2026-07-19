@@ -1,11 +1,33 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { acquireFileLock } from "../packages/cli/dist/images/file-lock.js";
+
+test("a reused PID does not keep an abandoned lock alive", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-file-lock-"));
+  const path = join(root, "artifact.lock");
+  try {
+    const releaseOriginal = await acquireFileLock(path, 100, 1);
+    const originalOwner = JSON.parse(await readFile(path, "utf8"));
+    await releaseOriginal();
+
+    await writeFile(path, `${JSON.stringify({
+      ...originalOwner,
+      startTimeTicks: originalOwner.startTimeTicks === "1" ? "2" : "1",
+      token: "abandoned-owner-token",
+    })}\n`, { mode: 0o600 });
+
+    const releaseRecovered = await acquireFileLock(path, 100, 1);
+    await releaseRecovered();
+    await assert.rejects(access(path), { code: "ENOENT" });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
 
 test("simultaneous stale-lock recovery admits only one holder", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-boot-file-lock-"));

@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { open, readFile, rm } from "node:fs/promises";
 
 import { ArtifactAcquisitionError } from "./errors.js";
+import { createLockOwnerIdentity, lockOwnerIsAlive } from "./lock-owner.js";
 
 type ReleaseLock = () => Promise<void>;
 
@@ -11,18 +11,14 @@ const delay = (milliseconds: number): Promise<void> =>
 const errorCode = (error: unknown): string | undefined =>
   (error as NodeJS.ErrnoException).code;
 
-const ownerIsAlive = (identity: string): boolean => {
-  try {
-    const owner = Number.parseInt(identity.split(":", 1)[0] ?? "", 10);
-    if (!Number.isSafeInteger(owner) || owner < 1) return true;
-    process.kill(owner, 0);
-    return true;
-  } catch (error) {
-    return errorCode(error) !== "ESRCH";
-  }
-};
-
 const tryAcquireOwnedLock = async (path: string): Promise<ReleaseLock | undefined> => {
+  let identity;
+  try {
+    identity = await createLockOwnerIdentity();
+  } catch {
+    throw new ArtifactAcquisitionError("cache-access");
+  }
+
   let handle;
   try {
     handle = await open(path, "wx", 0o600);
@@ -31,7 +27,6 @@ const tryAcquireOwnedLock = async (path: string): Promise<ReleaseLock | undefine
     throw new ArtifactAcquisitionError("cache-access");
   }
 
-  const identity = `${String(process.pid)}:${randomUUID()}\n`;
   try {
     await handle.writeFile(identity, "utf8");
     await handle.sync();
@@ -67,7 +62,9 @@ async function recoverStaleLock(
 
   try {
     const currentIdentity = await readIdentity(path);
-    if (currentIdentity !== observedIdentity || ownerIsAlive(currentIdentity)) return false;
+    if (currentIdentity !== observedIdentity || await lockOwnerIsAlive(currentIdentity)) {
+      return false;
+    }
     await rm(path);
     return true;
   } catch (error) {
@@ -91,7 +88,7 @@ async function acquireFileLockUntil(
     const observedIdentity = await readIdentity(path);
     if (observedIdentity === undefined) continue;
     if (
-      !ownerIsAlive(observedIdentity)
+      !await lockOwnerIsAlive(observedIdentity)
       && await recoverStaleLock(path, observedIdentity, deadline, pollMs)
     ) continue;
     await delay(pollMs);
