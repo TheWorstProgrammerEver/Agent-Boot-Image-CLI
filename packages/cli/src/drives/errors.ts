@@ -2,6 +2,7 @@ export type DriveGuardrailCode =
   | "active-system-disk"
   | "active-root-unresolved"
   | "confirmation-rejected"
+  | "descendant-mount-unresolved"
   | "descendant-mounted"
   | "identity-changed"
   | "invalid-constraints"

@@ -102,7 +102,11 @@ const resolveTarget = (
   if (rootAncestors.has(target.kernelName)) {
     fail("active-system-disk", "Target contains the active root filesystem.");
   }
-  if (mountedDescendants(target, snapshot).length > 0) {
+  const mounted = mountedDescendants(target, snapshot);
+  if (mounted === undefined) {
+    fail("descendant-mount-unresolved", "Mounted-device ancestry could not be established.");
+  }
+  if (mounted.length > 0) {
     fail("descendant-mounted", "Target or one of its descendants is mounted.");
   }
   if (target.model !== request.constraints.expectedModel.trim()) {

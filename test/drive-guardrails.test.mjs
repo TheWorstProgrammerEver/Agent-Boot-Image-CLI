@@ -275,6 +275,37 @@ test("unresolved active-root ancestry fails closed before destructive adapters",
   }
 });
 
+test("unresolved mounted-device ancestry fails closed before destructive adapters", async () => {
+  const cases = [
+    snapshot({
+      devices: devices.map((device) => device.kernelName === "sdb1"
+        ? { ...device, mountpoints: ["/media/fixture"], parentKernelName: "missing-parent" }
+        : device),
+    }),
+    snapshot({
+      devices: devices.map((device) => device.kernelName === "sdb1"
+        ? { ...device, mountpoints: ["/media/fixture"], parentKernelName: "sdb1" }
+        : device),
+    }),
+  ];
+
+  for (const targetSnapshot of cases) {
+    assert.ok(listDriveCandidates(targetSnapshot).every(({ safetyWarnings }) =>
+      safetyWarnings.includes("mounted device ancestry unresolved")));
+    const destructive = destructiveFake();
+    await assertGuardrail(
+      runGuardedImageTarget(
+        request(),
+        scriptedInspector(targetSnapshot),
+        { acknowledgement: { yes: true }, writeLine: () => undefined },
+        destructive.begin,
+      ),
+      "descendant-mount-unresolved",
+    );
+    assert.deepEqual(destructive.calls, { customize: 0, lock: 0, unmount: 0, write: 0 });
+  }
+});
+
 test("confirmation prints the plan first and requires the exact acknowledgement", async () => {
   const plan = await prepareImageTargetPlan(request(), scriptedInspector(snapshot()));
   const events = [];

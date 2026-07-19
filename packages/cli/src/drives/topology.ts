@@ -41,9 +41,14 @@ export const activeRootAncestors = (snapshot: DriveSnapshot): ReadonlySet<string
 export const mountedDescendants = (
   target: BlockDevice,
   snapshot: DriveSnapshot,
-): readonly BlockDevice[] => {
+): readonly BlockDevice[] | undefined => {
   const { byKernelName } = deviceMaps(snapshot);
-  return snapshot.devices.filter((device) =>
-    device.mountpoints.length > 0 &&
-    ancestorsOf(device, byKernelName)?.has(target.kernelName) === true);
+  const mounted = snapshot.devices.filter((device) => device.mountpoints.length > 0);
+  const descendants: BlockDevice[] = [];
+  for (const device of mounted) {
+    const ancestors = ancestorsOf(device, byKernelName);
+    if (ancestors === undefined) return undefined;
+    if (ancestors.has(target.kernelName)) descendants.push(device);
+  }
+  return descendants;
 };

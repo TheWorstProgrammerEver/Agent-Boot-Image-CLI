@@ -25,11 +25,14 @@ export const listDriveCandidates = (snapshot: DriveSnapshot): DriveCandidate[] =
     .filter((device) => device.type === "disk")
     .map((device): DriveCandidate => {
       const stableTargets = linksFor(device, snapshot);
+      const mounted = mountedDescendants(device, snapshot);
       const safetyWarnings = [
         ...(rootAncestors === undefined
           ? ["active root ancestry unresolved"]
           : rootAncestors.has(device.kernelName) ? ["active system disk"] : []),
-        ...(mountedDescendants(device, snapshot).length > 0 ? ["mounted descendants"] : []),
+        ...(mounted === undefined
+          ? ["mounted device ancestry unresolved"]
+          : mounted.length > 0 ? ["mounted descendants"] : []),
         ...(!device.removable ? ["not removable"] : []),
         ...(stableTargets.length === 0 ? ["no stable by-id target"] : []),
       ];
