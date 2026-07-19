@@ -219,7 +219,7 @@ test("ephemeral storage rejects traversal and a symlinked runtime boundary", asy
   }
 });
 
-test("provider execution regenerates after reboot and receives deliberate cwd, env, and stdin", async () => {
+test("provider execution regenerates the producer snapshot after reboot", async () => {
   const marker = "private-reboot-marker";
   const progress = [];
   const promptFixture = await createPromptFixture();
@@ -235,8 +235,27 @@ test("provider execution regenerates after reboot and receives deliberate cwd, e
     promptFixture.store,
   );
   const host = new FakeCommandHost();
+  const changedEnvironment = {
+    id: "change-agent-name",
+    key: "AGENT_NAME",
+    kind: "environment",
+    operation: "set",
+    value: "Changed Agent",
+  };
+  const unsetEnvironment = {
+    id: "unset-agent-name",
+    key: "AGENT_NAME",
+    kind: "environment",
+    operation: "unset",
+  };
   const fixture = await createEngineFixture(
-    [environmentStep(), promptStep, providerStep],
+    [
+      environmentStep(),
+      promptStep,
+      changedEnvironment,
+      unsetEnvironment,
+      providerStep,
+    ],
     {
       engineOptions: {
         automaticPolicy: { maxAttempts: 1, timeoutMs: 60_000 },
@@ -282,7 +301,7 @@ test("provider execution regenerates after reboot and receives deliberate cwd, e
     assert.equal(call.cwd, "/home/my-user/workspace");
     assert.equal(call.environment.HOME, "/home/my-user");
     assert.equal(call.environment.PATH, "/opt/agent/bin:/usr/bin");
-    assert.equal(call.environment.AGENT_NAME, "My Agent");
+    assert.equal(call.environment.AGENT_NAME, undefined);
     assert.equal(new TextDecoder().decode(call.stdin), `Agent=My Agent\nSecret=${marker}\n`);
     assert.equal(call.stdio, "stream");
     assert.equal(call.timeoutMs, 120_000);

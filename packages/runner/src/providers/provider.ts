@@ -62,11 +62,16 @@ export class ProviderStepExecutor {
     step: ProviderStep,
     descriptor: ProviderDescriptor,
     promptStep: PromptStep,
-    environment: ChildEnvironment,
+    environments: {
+      readonly promptEnvironment: ChildEnvironment;
+      readonly providerEnvironment: ChildEnvironment;
+    },
   ): Promise<ProviderAttemptResult> {
     let prompt: Uint8Array;
     try {
-      prompt = (await this.#hydrator.hydrate(promptStep, environment)).contents;
+      prompt = (
+        await this.#hydrator.hydrate(promptStep, environments.promptEnvironment)
+      ).contents;
     } catch {
       return failed("prompt-hydration-failed");
     }
@@ -81,7 +86,7 @@ export class ProviderStepExecutor {
       const command = this.#adapter.createProcess({
         cwd: this.#environment.workingDirectoryFor(descriptor.command),
         descriptor,
-        environment,
+        environment: environments.providerEnvironment,
         prompt,
         step,
         timeoutMs: this.#policy.timeoutMs,

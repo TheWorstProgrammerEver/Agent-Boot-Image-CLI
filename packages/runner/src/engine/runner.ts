@@ -290,20 +290,34 @@ export class RunnerEngine {
         const descriptor = this.#plan.providers.find(
           (provider) => provider.id === step.providerId,
         );
-        const promptStep = this.#plan.steps.find(
+        const promptStepIndex = this.#plan.steps.findIndex(
           (candidate) =>
             candidate.kind === "prompt" &&
             candidate.renderedPromptId === step.renderedPromptId,
         );
-        if (descriptor === undefined || promptStep?.kind !== "prompt" || this.#provider === undefined) {
+        const promptStep = this.#plan.steps[promptStepIndex];
+        if (
+          descriptor === undefined ||
+          promptStepIndex < 0 ||
+          promptStep?.kind !== "prompt" ||
+          this.#provider === undefined
+        ) {
           throw new Error("Invariant violation: provider references failed preflight");
         }
-        const environment = this.#environment.forStep(this.#plan.steps, pending.index);
         const attempt = await this.#provider.execute(
           step,
           descriptor,
           promptStep,
-          environment,
+          {
+            promptEnvironment: this.#environment.forStep(
+              this.#plan.steps,
+              promptStepIndex,
+            ),
+            providerEnvironment: this.#environment.forStep(
+              this.#plan.steps,
+              pending.index,
+            ),
+          },
         );
         if (attempt.status === "succeeded") {
           checkpoint = { ...checkpoint, phase: "succeeded" };
