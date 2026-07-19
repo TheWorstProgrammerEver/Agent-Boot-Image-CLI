@@ -101,6 +101,33 @@ test("raw writer detects short writes, short and oversized sources, and sync fai
   );
 });
 
+test("raw writer preserves operation and handle-close failures", async () => {
+  const operationFailure = new ImageWriteError("short-write", "fixture write failure");
+  const closeFailure = new Error("fixture write close failure");
+  const target = {
+    close: async () => { throw closeFailure; },
+    read: async () => ({ bytesRead: 0 }),
+    sync: async () => undefined,
+    write: async () => { throw operationFailure; },
+  };
+
+  await assert.rejects(new ExactRawImageWriter({
+    openRead: async () => target,
+    openWrite: async () => target,
+  }).write({
+    cancellation: new globalThis.AbortController().signal,
+    expectedByteLength: 4,
+    source: memorySource([Uint8Array.of(1, 2, 3, 4)]),
+    targetPath: "/fixture/target.raw",
+  }), error => {
+    assert.ok(error instanceof ImageWriteError);
+    assert.equal(error.code, "cleanup-failed");
+    assert.ok(error.cause instanceof AggregateError);
+    assert.deepEqual(error.cause.errors, [operationFailure, closeFailure]);
+    return true;
+  });
+});
+
 test("full read-back comparison rejects short reads and mismatches", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-boot-read-back-"));
   const sourcePath = join(root, "source.raw");
@@ -126,6 +153,33 @@ test("full read-back comparison rejects short reads and mismatches", async () =>
   } finally {
     await rm(root, { force: true, recursive: true });
   }
+});
+
+test("read-back verifier preserves operation and handle-close failures", async () => {
+  const operationFailure = new ImageWriteError("short-read", "fixture read failure");
+  const closeFailure = new Error("fixture read close failure");
+  const target = {
+    close: async () => { throw closeFailure; },
+    read: async () => { throw operationFailure; },
+    sync: async () => undefined,
+    write: async (_buffer, _offset, length) => ({ bytesWritten: length }),
+  };
+
+  await assert.rejects(new FullReadBackVerifier({
+    openRead: async () => target,
+    openWrite: async () => target,
+  }).verify({
+    cancellation: new globalThis.AbortController().signal,
+    expectedByteLength: 4,
+    source: memorySource([Uint8Array.of(1, 2, 3, 4)]),
+    targetPath: "/fixture/target.raw",
+  }), error => {
+    assert.ok(error instanceof ImageWriteError);
+    assert.equal(error.code, "cleanup-failed");
+    assert.ok(error.cause instanceof AggregateError);
+    assert.deepEqual(error.cause.errors, [operationFailure, closeFailure]);
+    return true;
+  });
 });
 
 test("cancellation stops and awaits an active image stream", async () => {

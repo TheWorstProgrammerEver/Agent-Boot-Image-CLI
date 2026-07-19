@@ -100,6 +100,9 @@ export class ExactRawImageWriter implements RawImageWriter {
             cause: error,
           });
         }
+        throw new ImageWriteError("cleanup-failed", "Target write handle cleanup did not complete.", {
+          cause: new AggregateError([operationError, error]),
+        });
       }
     }
   }

@@ -105,6 +105,9 @@ export class FullReadBackVerifier implements ReadBackVerifier {
             cause: error,
           });
         }
+        throw new ImageWriteError("cleanup-failed", "Target read handle cleanup did not complete.", {
+          cause: new AggregateError([operationError, error]),
+        });
       }
     }
   }
