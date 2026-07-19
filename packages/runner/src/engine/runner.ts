@@ -421,10 +421,6 @@ export class RunnerEngine {
           if (failure.result !== undefined) return failure.result;
           continue;
         }
-        if (step.kind !== "fire-and-forget") {
-          throw new Error("Invariant violation: unsupported step passed preflight");
-        }
-
         const launch = await this.#processLifecycle.launch(state, step, pending.index);
         this.#throwIfCanceled();
         state = launch.state;
