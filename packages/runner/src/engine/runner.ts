@@ -6,6 +6,8 @@ import {
   type RunnerDiagnostic,
   type StepCheckpoint,
 } from "../state/index.js";
+import type { PromptHydrator } from "../prompts/index.js";
+import { ProviderStepExecutor } from "../providers/provider.js";
 import { AutomaticStepExecutor } from "../steps/automatic/index.js";
 import { RunnerEnvironment } from "../steps/environment/index.js";
 import {
@@ -16,7 +18,9 @@ import {
   loadRunnerPlan,
   validateAutomaticPolicy,
   validateManualPolicy,
+  validateProviderPolicy,
 } from "./configuration.js";
+import { RunnerConfigurationError } from "./errors.js";
 import type {
   RunnerEngineOptions,
   RunnerExecutionResult,
@@ -35,11 +39,15 @@ const terminalResult = (state: RunnerCheckpoint): RunnerExecutionResult | undefi
 
 const attemptDiagnostic = (
   checkpoint: StepCheckpoint,
-  failure: { readonly exitCode: number | null; readonly signal: NodeJS.Signals | null },
+  failure: {
+    readonly code?: RunnerDiagnostic["code"];
+    readonly exitCode: number | null;
+    readonly signal: NodeJS.Signals | null;
+  },
   recovery: RunnerDiagnostic["recovery"],
 ): RunnerDiagnostic => ({
   attempt: checkpoint.attempt,
-  code: "step-attempt-failed",
+  code: failure.code ?? "step-attempt-failed",
   exitCode: failure.exitCode,
   recovery,
   signal: failure.signal,
@@ -54,11 +62,24 @@ export class RunnerEngine {
   readonly #maxAttempts: number;
   readonly #onProgress: ((progress: RunnerProgress) => void) | undefined;
   readonly #plan: RunnerPlan;
+  readonly #promptHydrator: PromptHydrator | undefined;
+  readonly #provider: ProviderStepExecutor | undefined;
   readonly #stateStore: RunnerEngineOptions["stateStore"];
 
   constructor(options: RunnerEngineOptions) {
     validateAutomaticPolicy(options.automaticPolicy);
     validateManualPolicy(options.manualPolicy);
+    const providerConfiguration = [options.providerAdapter, options.providerPolicy];
+    if (
+      providerConfiguration.some((value) => value !== undefined) &&
+      (options.promptHydrator === undefined || providerConfiguration.some((value) => value === undefined))
+    ) {
+      throw new RunnerConfigurationError(
+        "provider execution",
+        "promptHydrator, providerAdapter, and providerPolicy must be supplied together",
+      );
+    }
+    if (options.providerPolicy !== undefined) validateProviderPolicy(options.providerPolicy);
     this.#plan = loadRunnerPlan(options.serializedPlan);
     this.#identity = identifyRunnerPlan(this.#plan, options.serializedPlan);
     this.#environment = new RunnerEnvironment(options.environment);
@@ -73,12 +94,33 @@ export class RunnerEngine {
       options.manualPolicy,
       options.manualScheduler,
     );
+    this.#promptHydrator = options.promptHydrator;
+    this.#provider =
+      options.promptHydrator === undefined ||
+      options.providerAdapter === undefined ||
+      options.providerPolicy === undefined
+        ? undefined
+        : new ProviderStepExecutor(
+            options.commandHost,
+            this.#environment,
+            options.promptHydrator,
+            options.providerAdapter,
+            options.providerPolicy,
+          );
     this.#maxAttempts = options.automaticPolicy.maxAttempts;
     this.#onProgress = options.onProgress;
     this.#stateStore = options.stateStore;
   }
 
   async run(): Promise<RunnerExecutionResult> {
+    try {
+      return await this.#run();
+    } finally {
+      await this.#promptHydrator?.removeAll();
+    }
+  }
+
+  async #run(): Promise<RunnerExecutionResult> {
     let state = await this.#stateStore.initialize(this.#identity);
     const existing = terminalResult(state);
     if (existing !== undefined) return existing;
@@ -90,7 +132,10 @@ export class RunnerEngine {
       return { state, status: "failed" };
     }
 
-    const unsupported = findUnsupportedStep(this.#plan.steps);
+    const unsupported = findUnsupportedStep(this.#plan.steps, {
+      prompt: this.#promptHydrator !== undefined,
+      provider: this.#provider !== undefined,
+    });
     if (unsupported !== undefined) {
       const diagnostic: RunnerDiagnostic = {
         code: "manual-intervention-required",
@@ -124,7 +169,10 @@ export class RunnerEngine {
 
       const step = this.#plan.steps[pending.index];
       if (step === undefined) throw new Error("Invariant violation: missing runner step");
-      if (!pending.shouldCheckpointStart && step.kind === "automatic") {
+      if (
+        !pending.shouldCheckpointStart &&
+        (step.kind === "automatic" || step.kind === "provider")
+      ) {
         const interrupted: StepCheckpoint = {
           attempt: pending.attempt,
           id: step.id,
@@ -133,7 +181,11 @@ export class RunnerEngine {
         };
         const failure = await this.#recordAttemptFailure(
           interrupted,
-          { exitCode: null, signal: null },
+          {
+            ...(step.kind === "provider" ? { code: "provider-execution-failed" as const } : {}),
+            exitCode: null,
+            signal: null,
+          },
         );
         state = failure.state;
         if (failure.result !== undefined) return failure.result;
@@ -157,6 +209,42 @@ export class RunnerEngine {
       });
 
       if (step.kind === "environment") {
+        checkpoint = { ...checkpoint, phase: "succeeded" };
+        state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
+        this.#emitStepSucceeded(checkpoint);
+        continue;
+      }
+      if (step.kind === "prompt") {
+        if (this.#promptHydrator === undefined) {
+          throw new Error("Invariant violation: prompt executor failed preflight");
+        }
+        const environment = this.#environment.forStep(this.#plan.steps, pending.index);
+        try {
+          await this.#promptHydrator.hydrate(step, environment);
+        } catch {
+          checkpoint = { ...checkpoint, phase: "failed" };
+          const failure = await this.#recordAttemptFailure(checkpoint, {
+            code: "prompt-hydration-failed",
+            exitCode: null,
+            signal: null,
+          });
+          state = failure.state;
+          if (failure.result !== undefined) return failure.result;
+          continue;
+        }
+        try {
+          await this.#promptHydrator.remove(step.renderedPromptId);
+        } catch {
+          checkpoint = { ...checkpoint, phase: "failed" };
+          const failure = await this.#recordAttemptFailure(checkpoint, {
+            code: "prompt-cleanup-failed",
+            exitCode: null,
+            signal: null,
+          });
+          state = failure.state;
+          if (failure.result !== undefined) return failure.result;
+          continue;
+        }
         checkpoint = { ...checkpoint, phase: "succeeded" };
         state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
         this.#emitStepSucceeded(checkpoint);
@@ -198,6 +286,51 @@ export class RunnerEngine {
         this.#emit({ diagnostic, status: "runner-failed" });
         return { state, status: "failed" };
       }
+      if (step.kind === "provider") {
+        const descriptor = this.#plan.providers.find(
+          (provider) => provider.id === step.providerId,
+        );
+        const promptStepIndex = this.#plan.steps.findIndex(
+          (candidate) =>
+            candidate.kind === "prompt" &&
+            candidate.renderedPromptId === step.renderedPromptId,
+        );
+        const promptStep = this.#plan.steps[promptStepIndex];
+        if (
+          descriptor === undefined ||
+          promptStepIndex < 0 ||
+          promptStep?.kind !== "prompt" ||
+          this.#provider === undefined
+        ) {
+          throw new Error("Invariant violation: provider references failed preflight");
+        }
+        const attempt = await this.#provider.execute(
+          step,
+          descriptor,
+          promptStep,
+          {
+            promptEnvironment: this.#environment.forStep(
+              this.#plan.steps,
+              promptStepIndex,
+            ),
+            providerEnvironment: this.#environment.forStep(
+              this.#plan.steps,
+              pending.index,
+            ),
+          },
+        );
+        if (attempt.status === "succeeded") {
+          checkpoint = { ...checkpoint, phase: "succeeded" };
+          state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
+          this.#emitStepSucceeded(checkpoint);
+          continue;
+        }
+        checkpoint = { ...checkpoint, phase: "failed" };
+        const failure = await this.#recordAttemptFailure(checkpoint, attempt);
+        state = failure.state;
+        if (failure.result !== undefined) return failure.result;
+        continue;
+      }
       if (step.kind !== "automatic") {
         throw new Error("Invariant violation: unsupported step passed preflight");
       }
@@ -219,7 +352,11 @@ export class RunnerEngine {
 
   async #recordAttemptFailure(
     checkpoint: StepCheckpoint,
-    failure: { readonly exitCode: number | null; readonly signal: NodeJS.Signals | null },
+    failure: {
+      readonly code?: RunnerDiagnostic["code"];
+      readonly exitCode: number | null;
+      readonly signal: NodeJS.Signals | null;
+    },
   ): Promise<{
     readonly result?: RunnerExecutionResult;
     readonly state: RunnerCheckpoint;

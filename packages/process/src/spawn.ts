@@ -40,8 +40,16 @@ const validateSpawnCommand = (command: SpawnCommand): void => {
       (!Number.isSafeInteger(command.timeoutMs) || command.timeoutMs <= 0)) {
     throw new RangeError('timeoutMs must be a positive integer');
   }
+  if (command.stdin !== undefined &&
+      typeof command.stdin !== 'string' &&
+      !(command.stdin instanceof Uint8Array)) {
+    throw new TypeError('stdin must be a string or Uint8Array');
+  }
   if (command.lifetime.policy === 'detached' && command.lifetime.unref && command.stdio === 'stream') {
     throw new TypeError('an unref detached command cannot use streamed stdio');
+  }
+  if (command.stdin !== undefined && command.stdio === 'inherit') {
+    throw new TypeError('deliberate stdin cannot be combined with inherited stdio');
   }
   if (command.forwardSignals?.includes('SIGKILL') === true ||
       command.forwardSignals?.includes('SIGSTOP') === true) {
@@ -113,7 +121,9 @@ export class NodeSpawnAdapter implements SpawnHost {
         detached: true,
         env: environmentFor(command.environment),
         shell: false,
-        stdio: command.stdio === 'inherit' ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+        stdio: command.stdio === 'inherit'
+          ? 'inherit'
+          : [command.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });
     } catch (error) {
@@ -121,6 +131,11 @@ export class NodeSpawnAdapter implements SpawnHost {
     }
 
     if (command.lifetime.policy === 'detached' && command.lifetime.unref) child.unref();
+
+    if (command.stdin !== undefined) {
+      child.stdin?.on('error', () => undefined);
+      child.stdin?.end(command.stdin);
+    }
 
     let requestedReason: 'canceled' | 'timeout' | undefined;
     let termination: Promise<void> | undefined;

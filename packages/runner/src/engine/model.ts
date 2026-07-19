@@ -1,5 +1,8 @@
 import type { SpawnHost } from "@agent-boot/process";
 
+import type { PromptHydrator } from "../prompts/index.js";
+import type { ProviderDescriptorAdapter } from "../providers/adapter.js";
+
 import type {
   RunnerCheckpoint,
   RunnerDiagnostic,
@@ -34,6 +37,10 @@ export interface AutomaticStepPolicy {
 export interface ManualStepPolicy {
   readonly completionCheckTimeoutMs: number;
   readonly maximumPollIntervalMs: number;
+}
+
+export interface ProviderStepPolicy {
+  readonly timeoutMs: number;
 }
 
 export interface ManualStepScheduler {
@@ -92,6 +99,9 @@ export interface RunnerEngineOptions {
   readonly manualPolicy: ManualStepPolicy;
   readonly manualScheduler?: ManualStepScheduler;
   readonly onProgress?: (progress: RunnerProgress) => void;
+  readonly promptHydrator?: PromptHydrator;
+  readonly providerAdapter?: ProviderDescriptorAdapter;
+  readonly providerPolicy?: ProviderStepPolicy;
   readonly serializedPlan: string | Uint8Array;
   readonly stateStore: RunnerCheckpointStore;
 }
