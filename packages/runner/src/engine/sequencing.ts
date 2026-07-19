@@ -4,9 +4,14 @@ import type { RunnerCheckpoint, RunnerDiagnostic } from "../state/index.js";
 
 export const findUnsupportedStep = (
   steps: readonly RunnerStep[],
-  support: { readonly prompt: boolean; readonly provider: boolean } = {
+  support: {
+    readonly prompt: boolean;
+    readonly provider: boolean;
+    readonly userSecret: boolean;
+  } = {
     prompt: false,
     provider: false,
+    userSecret: false,
   },
 ): RunnerStep | undefined =>
   steps.find(
@@ -16,7 +21,8 @@ export const findUnsupportedStep = (
       step.kind !== "manual" &&
       step.kind !== "fire-and-forget" &&
       !(step.kind === "prompt" && support.prompt) &&
-      !(step.kind === "provider" && support.provider),
+      !(step.kind === "provider" && support.provider) &&
+      !(step.kind === "install-user-secret" && support.userSecret),
   );
 
 export const findRecoveryConflict = (

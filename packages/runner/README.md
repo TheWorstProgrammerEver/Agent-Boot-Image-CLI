@@ -56,6 +56,21 @@ Every tracked or adopted child is stopped before runner success, failure, or can
 The lifecycle policy and unsupported durable-lifetime boundary are recorded in
 [ADR 0008](../../docs/architecture/0008-fire-and-forget-lifecycle.md).
 
+User-secret installation maps each declared secret ID to one regular, non-symlink, single-link file
+under `/etc/agent-boot/bootstrap-secrets`. The destination is a normalized relative path resolved
+beneath the configured account home; symlink directory components and containment escapes are
+rejected. Destination directories are made private with mode `0700`, and secret bytes are written to
+a mode `0600` same-directory temporary file, synced, assigned the configured uid/gid, atomically
+renamed, and verified for content, ownership, mode, type, and link count before source removal.
+
+The persisted `prepared`, `installed`, `source-removed`, and `committed` phases make each boundary
+reboot-safe. Retry removes abandoned destination temporary files, validates any existing source
+against the installed bytes before unlinking it, and refuses to delete a replaced source. The source
+directory is synced after unlink and the step cannot succeed before the committed checkpoint.
+Source cleanup is automatic; declarations do not author a cleanup command. Progress explicitly
+labels source deletion as `unlink-not-secure-erase`: unlinking and syncing a directory removes the
+filesystem name durably but does not promise physical secure erasure from storage media.
+
 The checkpoint store persists only recovery-critical state. It records the exact runner-plan
 identity, monotonic step attempts, stable fire-and-forget process metadata, secret-install
 transaction phases, terminal outcome, and structured diagnostics that cannot contain command
