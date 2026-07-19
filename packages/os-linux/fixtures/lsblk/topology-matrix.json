@@ -1,0 +1,108 @@
+{
+  "blockdevices": [
+    {
+      "kname": "nvme0n1",
+      "path": "/dev/nvme0n1",
+      "pkname": null,
+      "type": "disk",
+      "size": 256060514304,
+      "model": "System NVMe",
+      "serial": "ROOT-SERIAL",
+      "rm": false,
+      "tran": "nvme",
+      "mountpoints": [null],
+      "children": [
+        {
+          "kname": "nvme0n1p2",
+          "path": "/dev/nvme0n1p2",
+          "pkname": "nvme0n1",
+          "type": "part",
+          "size": 255000000000,
+          "model": null,
+          "serial": null,
+          "rm": false,
+          "tran": "nvme",
+          "mountpoints": [null],
+          "children": [
+            {
+              "kname": "dm-0",
+              "path": "/dev/mapper/cryptroot",
+              "pkname": "nvme0n1p2",
+              "type": "crypt",
+              "size": "254000000000",
+              "model": null,
+              "serial": null,
+              "rm": "0",
+              "tran": null,
+              "mountpoints": ["/"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kname": "sdb",
+      "path": "/dev/sdb",
+      "pkname": null,
+      "type": "disk",
+      "size": "16008609792",
+      "model": "Fixture USB",
+      "serial": "SERIAL-SENSITIVE",
+      "rm": "1",
+      "tran": "usb",
+      "mountpoints": [null],
+      "children": [
+        {
+          "kname": "sdb1",
+          "path": "/dev/sdb1",
+          "pkname": "/dev/sdb",
+          "type": "part",
+          "size": 15900000000,
+          "model": null,
+          "serial": null,
+          "rm": 1,
+          "tran": "usb",
+          "mountpoints": [null]
+        }
+      ]
+    },
+    {
+      "kname": "sdc",
+      "path": "/dev/sdc",
+      "pkname": null,
+      "type": "disk",
+      "size": 32000000000,
+      "model": "Mounted USB",
+      "serial": "MOUNTED-SERIAL",
+      "rm": true,
+      "tran": "usb",
+      "mountpoints": [null],
+      "children": [
+        {
+          "kname": "sdc1",
+          "path": "/dev/sdc1",
+          "pkname": "sdc",
+          "type": "part",
+          "size": 31900000000,
+          "model": null,
+          "serial": null,
+          "rm": true,
+          "tran": "usb",
+          "mountpoints": ["/media/private-fixture-path"]
+        }
+      ]
+    },
+    {
+      "kname": "loop0",
+      "path": "/dev/loop0",
+      "pkname": null,
+      "type": "loop",
+      "size": 1048576,
+      "model": null,
+      "serial": null,
+      "rm": false,
+      "tran": null,
+      "mountpoints": [null]
+    }
+  ]
+}
