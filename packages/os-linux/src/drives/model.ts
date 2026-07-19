@@ -3,7 +3,7 @@ export interface BlockDevice {
   readonly kernelName: string;
   readonly model?: string;
   readonly mountpoints: readonly string[];
-  readonly parentKernelName?: string;
+  readonly parentKernelNames: readonly string[];
   readonly removable: boolean;
   readonly serial?: string;
   readonly sizeBytes: number;

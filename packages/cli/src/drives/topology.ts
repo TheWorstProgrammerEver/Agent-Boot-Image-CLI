@@ -13,15 +13,22 @@ const ancestorsOf = (
   byKernelName: ReadonlyMap<string, BlockDevice>,
 ): Set<string> | undefined => {
   const ancestors = new Set<string>();
-  let current = device;
-  while (!ancestors.has(current.kernelName)) {
+  const visiting = new Set<string>();
+
+  const visit = (current: BlockDevice): boolean => {
+    if (visiting.has(current.kernelName)) return false;
+    if (ancestors.has(current.kernelName)) return true;
+    visiting.add(current.kernelName);
     ancestors.add(current.kernelName);
-    if (current.parentKernelName === undefined) return ancestors;
-    const parent = byKernelName.get(current.parentKernelName);
-    if (parent === undefined) return undefined;
-    current = parent;
-  }
-  return undefined;
+    for (const parentKernelName of current.parentKernelNames) {
+      const parent = byKernelName.get(parentKernelName);
+      if (parent === undefined || !visit(parent)) return false;
+    }
+    visiting.delete(current.kernelName);
+    return true;
+  };
+
+  return visit(device) ? ancestors : undefined;
 };
 
 export const activeRootAncestors = (snapshot: DriveSnapshot): ReadonlySet<string> | undefined => {

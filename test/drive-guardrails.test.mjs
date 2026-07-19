@@ -27,6 +27,10 @@ const fixtureUrl = new URL(
 );
 const fixtureSource = await readFile(fixtureUrl, "utf8");
 const devices = parseLsblkJson(fixtureSource);
+const multiParentFixtureSource = await readFile(new URL(
+  "../packages/os-linux/fixtures/lsblk/multi-parent-root.json",
+  import.meta.url,
+), "utf8");
 
 const stableTarget = "/dev/disk/by-id/wwn-fixture-target";
 const partitionTarget = "/dev/disk/by-id/usb-fixture-part1";
@@ -98,20 +102,20 @@ const assertGuardrail = async (promise, code) => {
 test("recorded lsblk topology parses disks, partitions, mapper ancestry, and mounts", () => {
   assert.equal(devices.length, 8);
   assert.deepEqual(
-    devices.map(({ kernelName, parentKernelName, type }) => ({
+    devices.map(({ kernelName, parentKernelNames, type }) => ({
       kernelName,
-      parentKernelName,
+      parentKernelNames,
       type,
     })),
     [
-      { kernelName: "nvme0n1", parentKernelName: undefined, type: "disk" },
-      { kernelName: "nvme0n1p2", parentKernelName: "nvme0n1", type: "part" },
-      { kernelName: "dm-0", parentKernelName: "nvme0n1p2", type: "crypt" },
-      { kernelName: "sdb", parentKernelName: undefined, type: "disk" },
-      { kernelName: "sdb1", parentKernelName: "sdb", type: "part" },
-      { kernelName: "sdc", parentKernelName: undefined, type: "disk" },
-      { kernelName: "sdc1", parentKernelName: "sdc", type: "part" },
-      { kernelName: "loop0", parentKernelName: undefined, type: "loop" },
+      { kernelName: "nvme0n1", parentKernelNames: [], type: "disk" },
+      { kernelName: "nvme0n1p2", parentKernelNames: ["nvme0n1"], type: "part" },
+      { kernelName: "dm-0", parentKernelNames: ["nvme0n1p2"], type: "crypt" },
+      { kernelName: "sdb", parentKernelNames: [], type: "disk" },
+      { kernelName: "sdb1", parentKernelNames: ["sdb"], type: "part" },
+      { kernelName: "sdc", parentKernelNames: [], type: "disk" },
+      { kernelName: "sdc1", parentKernelNames: ["sdc"], type: "part" },
+      { kernelName: "loop0", parentKernelNames: [], type: "loop" },
     ],
   );
   assert.deepEqual(devices.find(({ kernelName }) => kernelName === "dm-0")?.mountpoints, ["/"]);
@@ -141,6 +145,7 @@ test("Linux inspector uses injected process and filesystem adapters only", async
   const inspected = await inspector.inspect();
   assert.equal(host.spawnCalls.length, 1);
   assert.equal(host.spawnCalls[0].executable, "lsblk");
+  assert.ok(host.spawnCalls[0].arguments.includes("--tree"));
   assert.deepEqual(filesystemCalls, [
     ["list", "/dev/disk/by-id"],
     ["realpath", stableTarget],
@@ -248,12 +253,12 @@ test("unresolved active-root ancestry fails closed before destructive adapters",
   const cases = [
     snapshot({
       devices: devices.map((device) => device.kernelName === "dm-0"
-        ? { ...device, parentKernelName: "missing-root-parent" }
+        ? { ...device, parentKernelNames: ["missing-root-parent"] }
         : device),
     }),
     snapshot({
       devices: devices.map((device) => device.kernelName === "nvme0n1p2"
-        ? { ...device, parentKernelName: "dm-0" }
+        ? { ...device, parentKernelNames: ["dm-0"] }
         : device),
     }),
   ];
@@ -275,16 +280,40 @@ test("unresolved active-root ancestry fails closed before destructive adapters",
   }
 });
 
+test("multi-parent active-root ancestry blocks every backing disk before destructive adapters", async () => {
+  const multiParentDevices = parseLsblkJson(multiParentFixtureSource);
+  assert.deepEqual(
+    multiParentDevices.find(({ kernelName }) => kernelName === "md0")?.parentKernelNames,
+    ["sda", "sdb"],
+  );
+  const targetSnapshot = snapshot({ devices: multiParentDevices });
+  const candidate = listDriveCandidates(targetSnapshot)
+    .find(({ canonicalPath }) => canonicalPath === "/dev/sdb");
+  assert.ok(candidate?.safetyWarnings.includes("active system disk"));
+
+  const destructive = destructiveFake();
+  await assertGuardrail(
+    runGuardedImageTarget(
+      request(),
+      scriptedInspector(targetSnapshot),
+      { acknowledgement: { yes: true }, writeLine: () => undefined },
+      destructive.begin,
+    ),
+    "active-system-disk",
+  );
+  assert.deepEqual(destructive.calls, { customize: 0, lock: 0, unmount: 0, write: 0 });
+});
+
 test("unresolved mounted-device ancestry fails closed before destructive adapters", async () => {
   const cases = [
     snapshot({
       devices: devices.map((device) => device.kernelName === "sdb1"
-        ? { ...device, mountpoints: ["/media/fixture"], parentKernelName: "missing-parent" }
+        ? { ...device, mountpoints: ["/media/fixture"], parentKernelNames: ["missing-parent"] }
         : device),
     }),
     snapshot({
       devices: devices.map((device) => device.kernelName === "sdb1"
-        ? { ...device, mountpoints: ["/media/fixture"], parentKernelName: "sdb1" }
+        ? { ...device, mountpoints: ["/media/fixture"], parentKernelNames: ["sdb1"] }
         : device),
     }),
   ];

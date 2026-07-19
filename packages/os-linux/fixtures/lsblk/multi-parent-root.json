@@ -1,0 +1,56 @@
+{
+  "blockdevices": [
+    {
+      "kname": "sda",
+      "path": "/dev/sda",
+      "pkname": null,
+      "type": "disk",
+      "size": 16008609792,
+      "model": "Fixture RAID Member",
+      "serial": "RAID-MEMBER-A",
+      "rm": true,
+      "tran": "usb",
+      "mountpoints": [null],
+      "children": [
+        {
+          "kname": "md0",
+          "path": "/dev/md0",
+          "pkname": "sda",
+          "type": "raid1",
+          "size": 16000000000,
+          "model": null,
+          "serial": null,
+          "rm": false,
+          "tran": null,
+          "mountpoints": ["/"]
+        }
+      ]
+    },
+    {
+      "kname": "sdb",
+      "path": "/dev/sdb",
+      "pkname": null,
+      "type": "disk",
+      "size": 16008609792,
+      "model": "Fixture USB",
+      "serial": "SERIAL-SENSITIVE",
+      "rm": true,
+      "tran": "usb",
+      "mountpoints": [null],
+      "children": [
+        {
+          "kname": "md0",
+          "path": "/dev/md0",
+          "pkname": "sdb",
+          "type": "raid1",
+          "size": 16000000000,
+          "model": null,
+          "serial": null,
+          "rm": false,
+          "tran": null,
+          "mountpoints": ["/"]
+        }
+      ]
+    }
+  ]
+}

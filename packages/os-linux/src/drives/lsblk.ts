@@ -57,48 +57,58 @@ const mountpoints = (value: unknown, field: string): string[] => {
 
 const kernelName = (value: string): string => value.slice(value.lastIndexOf("/") + 1);
 
+type DeviceFields = Omit<BlockDevice, "parentKernelNames">;
+
+interface DeviceBuilder {
+  readonly device: DeviceFields;
+  readonly parentKernelNames: Set<string>;
+}
+
+const sameDevice = (left: DeviceFields, right: DeviceFields): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
 const parseNode = (
   input: unknown,
   inheritedParent: string | undefined,
   path: string,
-  devices: BlockDevice[],
-  seen: Set<string>,
+  devices: Map<string, DeviceBuilder>,
 ): void => {
   const node = object(input, path) as LsblkNode;
   const name = kernelName(text(node.kname, `${path}.kname`));
-  if (seen.has(name)) throw new Error("Invalid lsblk JSON: duplicate kernel device identity.");
-  seen.add(name);
-
   const explicitParent = optionalText(node.pkname, `${path}.pkname`);
   const model = optionalText(node.model, `${path}.model`);
-  const parentKernelName = explicitParent === undefined
-    ? inheritedParent
-    : kernelName(explicitParent);
   const serial = optionalText(node.serial, `${path}.serial`);
   const transport = optionalText(node.tran, `${path}.tran`);
   const canonicalPath = text(node.path, `${path}.path`);
   if (!canonicalPath.startsWith("/dev/")) {
     throw new Error(`Invalid lsblk JSON: ${path}.path must be an absolute device path.`);
   }
-  devices.push({
+  const device: DeviceFields = {
     canonicalPath,
     kernelName: name,
     ...(model === undefined ? {} : { model }),
     mountpoints: mountpoints(node.mountpoints, `${path}.mountpoints`),
-    ...(parentKernelName === undefined ? {} : { parentKernelName }),
     removable: removable(node.rm, `${path}.rm`),
     ...(serial === undefined ? {} : { serial }),
     sizeBytes: size(node.size, `${path}.size`),
     ...(transport === undefined ? {} : { transport }),
     type: text(node.type, `${path}.type`),
-  });
+  };
+  const existing = devices.get(name);
+  if (existing !== undefined && !sameDevice(existing.device, device)) {
+    throw new Error("Invalid lsblk JSON: repeated kernel device identity is inconsistent.");
+  }
+  const builder = existing ?? { device, parentKernelNames: new Set<string>() };
+  if (inheritedParent !== undefined) builder.parentKernelNames.add(inheritedParent);
+  if (explicitParent !== undefined) builder.parentKernelNames.add(kernelName(explicitParent));
+  devices.set(name, builder);
 
   if (node.children === undefined) return;
   if (!Array.isArray(node.children)) {
     throw new Error(`Invalid lsblk JSON: ${path}.children must be an array.`);
   }
   node.children.forEach((child, index) => {
-    parseNode(child, name, `${path}.children[${String(index)}]`, devices, seen);
+    parseNode(child, name, `${path}.children[${String(index)}]`, devices);
   });
 };
 
@@ -114,10 +124,12 @@ export const parseLsblkJson = (source: string): BlockDevice[] => {
     throw new Error("Invalid lsblk JSON: blockdevices must be an array.");
   }
 
-  const devices: BlockDevice[] = [];
-  const seen = new Set<string>();
+  const devices = new Map<string, DeviceBuilder>();
   root.blockdevices.forEach((node, index) => {
-    parseNode(node, undefined, `blockdevices[${String(index)}]`, devices, seen);
+    parseNode(node, undefined, `blockdevices[${String(index)}]`, devices);
   });
-  return devices;
+  return [...devices.values()].map(({ device, parentKernelNames }) => ({
+    ...device,
+    parentKernelNames: [...parentKernelNames].sort((left, right) => left.localeCompare(right)),
+  }));
 };

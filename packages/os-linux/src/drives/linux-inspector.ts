@@ -43,6 +43,7 @@ const captureLsblk = async (host: SpawnHost): Promise<string> => {
       "--json",
       "--bytes",
       "--paths",
+      "--tree",
       "--output",
       "KNAME,PATH,PKNAME,TYPE,SIZE,MODEL,SERIAL,RM,TRAN,MOUNTPOINTS",
     ],
