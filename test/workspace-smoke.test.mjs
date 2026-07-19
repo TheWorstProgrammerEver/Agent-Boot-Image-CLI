@@ -9,6 +9,7 @@ const packages = [
   "definition",
   "synth",
   "process",
+  "os-adapters",
   "os-linux",
   "runner",
   "cli",

@@ -1,0 +1,21 @@
+{
+  "name": "@agent-boot/os-adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Curated operating-system catalog and adapter boundary.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog/index.d.ts",
+      "default": "./dist/catalog/index.js"
+    }
+  },
+  "files": ["dist", "fixtures"],
+  "dependencies": {
+    "@agent-boot/protocol": "0.0.0"
+  }
+}

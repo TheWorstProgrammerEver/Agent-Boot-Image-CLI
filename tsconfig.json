@@ -6,6 +6,7 @@
     { "path": "packages/definition" },
     { "path": "packages/synth" },
     { "path": "packages/process" },
+    { "path": "packages/os-adapters" },
     { "path": "packages/os-linux" },
     { "path": "packages/runner" },
     { "path": "packages/cli" }
