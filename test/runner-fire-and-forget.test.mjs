@@ -3,9 +3,11 @@ import { spawn } from "node:child_process";
 import { execPath } from "node:process";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { TextEncoder } from "node:util";
 
 import { NodeSpawnAdapter } from "@agent-boot/process";
 import {
+  CodexProviderAdapter,
   RunnerInterruptedError,
   LinuxProcessIdentityHost,
   RunnerPlanError,
@@ -42,6 +44,32 @@ const manualStep = () => ({
   kind: "manual",
   pollIntervalSeconds: 1,
 });
+
+const promptStep = {
+  id: "render-provider-prompt",
+  kind: "prompt",
+  renderedPromptId: "provider-prompt",
+  retention: "ephemeral",
+  templateId: "provider-template",
+  variables: [],
+};
+
+const providerStep = {
+  id: "run-provider",
+  kind: "provider",
+  providerId: "codex",
+  renderedPromptId: "provider-prompt",
+};
+
+const codexProvider = {
+  command: {
+    arguments: ["exec", "-"],
+    executable: "codex",
+    workingDirectory: { path: "workspace", scope: "user-home" },
+  },
+  id: "codex",
+  promptTransport: "stdin",
+};
 
 const seedPriorBootLaunch = async (fixture, identityHost, phase) => {
   const identity = identifyRunnerPlan(
@@ -297,6 +325,67 @@ test("runner cancellation during a manual gate stops foreground and accepted pro
     assert.equal(inspection.status, "valid");
     assert.equal(inspection.state.terminal, null);
     assert.equal(inspection.state.currentStep.id, "manual-gate");
+    assert.equal(inspection.state.currentStep.phase, "started");
+    assert.equal(inspection.state.fireAndForgetProcesses[0].outcome, "runner-shutdown");
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("runner cancellation during provider execution stops provider and accepted processes", async () => {
+  const controller = new globalThis.AbortController();
+  const identityHost = createIdentityHost();
+  const host = new ScriptedSpawnHost(identityHost)
+    .scriptRunning(701)
+    .scriptRunning(702);
+  let markProviderStarted;
+  const providerStarted = new Promise(resolve => {
+    markProviderStarted = resolve;
+  });
+  const promptHydrator = {
+    hydrate: async () => ({ contents: new TextEncoder().encode("private prompt") }),
+    remove: async () => undefined,
+    removeAll: async () => undefined,
+  };
+  const fixture = await createEngineFixture(
+    [fireAndForgetStep(), promptStep, providerStep],
+    {
+      engineOptions: {
+        cancellation: controller.signal,
+        fireAndForgetPolicy: policy,
+        lifecycleWait: async () => undefined,
+        onProgress: progress => {
+          if (progress.status === "step-started" && progress.stepId === providerStep.id) {
+            markProviderStarted();
+          }
+        },
+        processIdentityHost: identityHost,
+        promptHydrator,
+        providerAdapter: new CodexProviderAdapter(),
+        providerPolicy: { timeoutMs: 120_000 },
+      },
+      host,
+      providers: [codexProvider],
+    },
+  );
+  try {
+    const running = fixture.engine.run();
+    await providerStarted;
+    controller.abort("SIGINT");
+
+    await assert.rejects(running, RunnerInterruptedError);
+    assert.equal(host.spawnCalls[1].cancellation, controller.signal);
+    assert.deepEqual(host.spawnCalls[1].control.cancelSignals, ["SIGTERM"]);
+    assert.deepEqual(host.spawnCalls[0].control.cancelSignals, ["SIGINT"]);
+
+    const identity = identifyRunnerPlan(
+      { agentId: "test-agent", schemaVersion: 1 },
+      fixture.serializedPlan,
+    );
+    const inspection = await fixture.store.inspect(identity);
+    assert.equal(inspection.status, "valid");
+    assert.equal(inspection.state.terminal, null);
+    assert.equal(inspection.state.currentStep.id, providerStep.id);
     assert.equal(inspection.state.currentStep.phase, "started");
     assert.equal(inspection.state.fireAndForgetProcesses[0].outcome, "runner-shutdown");
   } finally {

@@ -347,6 +347,7 @@ export class RunnerEngine {
               ),
               providerEnvironment: environment,
             },
+            this.#cancellation,
           );
           this.#throwIfCanceled();
           if (attempt.status === "succeeded") {

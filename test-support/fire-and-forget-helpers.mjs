@@ -110,19 +110,33 @@ export class ScriptedSpawnHost {
     const completion = new Promise(resolvePromise => {
       resolve = resolvePromise;
     });
+    let cancellationListener;
+    let settled = false;
     const control = {
       cancelSignals: [],
       complete: result => {
+        if (settled) return;
+        settled = true;
+        if (cancellationListener !== undefined) {
+          command.cancellation?.removeEventListener("abort", cancellationListener);
+        }
         this.identityHost.remove(script.pid);
         resolve(result);
       },
     };
+    const cancel = signal => {
+      if (settled) return;
+      control.cancelSignals.push(signal ?? "SIGTERM");
+      control.complete({ exitCode: null, reason: "canceled", signal: signal ?? "SIGTERM" });
+    };
+    if (command.cancellation !== undefined) {
+      cancellationListener = () => cancel();
+      if (command.cancellation.aborted) cancellationListener();
+      else command.cancellation.addEventListener("abort", cancellationListener, { once: true });
+    }
     this.readonlyCalls.push({ ...snapshot(command), control });
     return {
-      cancel: signal => {
-        control.cancelSignals.push(signal ?? "SIGTERM");
-        control.complete({ exitCode: null, reason: "canceled", signal: signal ?? "SIGTERM" });
-      },
+      cancel,
       completion,
       pid: script.pid,
       sendSignal: () => false,

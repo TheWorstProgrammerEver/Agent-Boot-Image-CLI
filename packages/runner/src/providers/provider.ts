@@ -66,6 +66,7 @@ export class ProviderStepExecutor {
       readonly promptEnvironment: ChildEnvironment;
       readonly providerEnvironment: ChildEnvironment;
     },
+    cancellation?: AbortSignal,
   ): Promise<ProviderAttemptResult> {
     let prompt: Uint8Array;
     try {
@@ -91,7 +92,10 @@ export class ProviderStepExecutor {
         step,
         timeoutMs: this.#policy.timeoutMs,
       });
-      const result = await this.#commandHost.spawn(command).completion;
+      const result = await this.#commandHost.spawn({
+        ...command,
+        ...(cancellation === undefined ? {} : { cancellation }),
+      }).completion;
       return succeeded(result)
         ? { status: "succeeded" }
         : failed("provider-execution-failed", result);
