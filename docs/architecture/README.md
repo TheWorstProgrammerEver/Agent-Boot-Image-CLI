@@ -27,3 +27,4 @@ TypeScript imports against it.
 5. [Secret materialization and redaction boundary](0005-secret-redaction-boundary.md)
 6. [Separate process adapters](0006-separate-process-adapters.md)
 7. [Versioned assembly protocol compatibility](0007-versioned-assembly-protocol.md)
+8. [Runner-lifetime fire-and-forget processes](0008-fire-and-forget-lifecycle.md)

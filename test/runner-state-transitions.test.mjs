@@ -4,6 +4,7 @@ import { TextEncoder } from "node:util";
 
 import {
   CheckpointValidationError,
+  RUNNER_CHECKPOINT_SCHEMA_VERSION,
   StateTransitionError,
   identifyRunnerPlan,
   parseRunnerCheckpoint,
@@ -112,6 +113,79 @@ test("secret transactions resume one idempotent phase at a time", async () => {
   }
 });
 
+test("fire-and-forget process identities advance through bounded generations", async () => {
+  const fixture = await createStateFixture();
+  const identity = {
+    bootId: "11111111-1111-4111-8111-111111111111",
+    pid: 1234,
+    processGroupId: 1234,
+    startTimeTicks: "987654",
+  };
+  try {
+    await fixture.store.initialize(fixture.plan);
+    await fixture.store.checkpointStep(fixture.plan, {
+      attempt: 1,
+      id: "support-service",
+      index: 0,
+      phase: "started",
+    });
+    const registered = await fixture.store.checkpointFireAndForgetProcess(fixture.plan, {
+      generation: 1,
+      identity,
+      kind: "register",
+      stepId: "support-service",
+      stepIndex: 0,
+    });
+    assert.equal(registered.fireAndForgetProcesses[0].phase, "registered");
+
+    const accepted = await fixture.store.checkpointFireAndForgetProcess(fixture.plan, {
+      generation: 1,
+      identity,
+      kind: "accept",
+      stepId: "support-service",
+      stepIndex: 0,
+    });
+    assert.equal(accepted.fireAndForgetProcesses[0].phase, "accepted");
+    await assert.rejects(
+      fixture.store.checkpointFireAndForgetProcess(fixture.plan, {
+        generation: 1,
+        identity: { ...identity, startTimeTicks: "987655" },
+        kind: "finish",
+        outcome: "runner-shutdown",
+        exitCode: null,
+        signal: "SIGTERM",
+        stepId: "support-service",
+        stepIndex: 0,
+      }),
+      StateTransitionError,
+    );
+
+    const finished = await fixture.store.checkpointFireAndForgetProcess(fixture.plan, {
+      generation: 1,
+      identity,
+      kind: "finish",
+      outcome: "runner-shutdown",
+      exitCode: null,
+      signal: "SIGTERM",
+      stepId: "support-service",
+      stepIndex: 0,
+    });
+    assert.equal(finished.fireAndForgetProcesses[0].phase, "finished");
+    assert.doesNotMatch(JSON.stringify(finished), /arguments|environment|stdout|stderr/u);
+
+    const replacement = await fixture.store.checkpointFireAndForgetProcess(fixture.plan, {
+      generation: 2,
+      identity: { ...identity, pid: 1235, processGroupId: 1235 },
+      kind: "register",
+      stepId: "support-service",
+      stepIndex: 0,
+    });
+    assert.equal(replacement.fireAndForgetProcesses[0].generation, 2);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("terminal success and failure checkpoints are immutable and idempotent", async () => {
   const successFixture = await createStateFixture();
   try {
@@ -151,9 +225,10 @@ test("terminal success and failure checkpoints are immutable and idempotent", as
 test("checkpoint schema excludes free-form diagnostics and secret contents", () => {
   const document = {
     currentStep: null,
+    fireAndForgetProcesses: [],
     plan: { agentId: "test-agent", planSha256: "a".repeat(64), schemaVersion: 1 },
     revision: 1,
-    schemaVersion: 1,
+    schemaVersion: RUNNER_CHECKPOINT_SCHEMA_VERSION,
     secretTransaction: null,
     terminal: {
       at: "2026-07-19T00:00:00.000Z",

@@ -61,9 +61,10 @@ test("startup reports stale plan identity and refuses implicit replacement", asy
 test("startup distinguishes incompatible, corrupt, truncated, and oversized state", async () => {
   const fixture = await createStateFixture();
   try {
-    await writeCheckpoint(fixture.path, { schemaVersion: 2 });
+    const incompatibleVersion = RUNNER_CHECKPOINT_SCHEMA_VERSION + 1;
+    await writeCheckpoint(fixture.path, { schemaVersion: incompatibleVersion });
     assert.deepEqual(await fixture.store.inspect(fixture.plan), {
-      foundVersion: 2,
+      foundVersion: incompatibleVersion,
       status: "incompatible",
     });
 
@@ -73,7 +74,10 @@ test("startup distinguishes incompatible, corrupt, truncated, and oversized stat
       status: "corrupt",
     });
 
-    await writeCheckpoint(fixture.path, { schemaVersion: 1, secretValue: "must-not-surface" });
+    await writeCheckpoint(fixture.path, {
+      schemaVersion: RUNNER_CHECKPOINT_SCHEMA_VERSION,
+      secretValue: "must-not-surface",
+    });
     assert.deepEqual(await fixture.store.inspect(fixture.plan), {
       diagnostic: "state document does not match its schema",
       status: "corrupt",

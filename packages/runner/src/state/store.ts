@@ -8,6 +8,7 @@ import { CheckpointValidationError, StateAccessError, UnsafeRecoveryError } from
 import { NodeStateFileSystem, type StateFileSystem } from "./filesystem.js";
 import {
   RUNNER_CHECKPOINT_SCHEMA_VERSION,
+  type FireAndForgetProcessEvent,
   type RunnerCheckpoint,
   type RunnerDiagnostic,
   type RunnerPlanIdentity,
@@ -18,6 +19,7 @@ import { samePlanIdentity } from "./plan-identity.js";
 import { checkpointSchemaVersion, parseRunnerCheckpoint } from "./schema.js";
 import {
   initializeCheckpoint,
+  transitionFireAndForgetProcess,
   transitionSecretTransaction,
   transitionStep,
   transitionTerminalFailure,
@@ -134,6 +136,15 @@ export class RunnerStateStore {
 
   checkpointStep(plan: RunnerPlanIdentity, checkpoint: StepCheckpoint): Promise<RunnerCheckpoint> {
     return this.#update(plan, (state, updatedAt) => transitionStep(state, checkpoint, updatedAt));
+  }
+
+  checkpointFireAndForgetProcess(
+    plan: RunnerPlanIdentity,
+    event: FireAndForgetProcessEvent,
+  ): Promise<RunnerCheckpoint> {
+    return this.#update(plan, (state, updatedAt) =>
+      transitionFireAndForgetProcess(state, event, updatedAt),
+    );
   }
 
   checkpointSecretTransaction(

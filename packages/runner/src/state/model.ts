@@ -1,4 +1,4 @@
-export const RUNNER_CHECKPOINT_SCHEMA_VERSION = 1 as const;
+export const RUNNER_CHECKPOINT_SCHEMA_VERSION = 2 as const;
 
 export interface RunnerPlanIdentity {
   readonly agentId: string;
@@ -14,6 +14,62 @@ export interface StepCheckpoint {
   readonly index: number;
   readonly phase: StepCheckpointPhase;
 }
+
+export interface ProcessIdentity {
+  readonly bootId: string;
+  readonly pid: number;
+  readonly processGroupId: number;
+  readonly startTimeTicks: string;
+}
+
+export type FireAndForgetProcessPhase = "registered" | "accepted" | "finished";
+
+export type FireAndForgetProcessOutcome =
+  | "exited-before-acceptance"
+  | "exited-after-acceptance"
+  | "reconciled-missing"
+  | "runner-shutdown";
+
+export interface FireAndForgetProcessCheckpoint {
+  readonly acceptedAt?: string;
+  readonly exitCode?: number | null;
+  readonly finishedAt?: string;
+  readonly generation: number;
+  readonly identity: ProcessIdentity;
+  readonly lifetime: "runner";
+  readonly outcome?: FireAndForgetProcessOutcome;
+  readonly phase: FireAndForgetProcessPhase;
+  readonly registeredAt: string;
+  readonly signal?: NodeJS.Signals | null;
+  readonly stepId: string;
+  readonly stepIndex: number;
+}
+
+export type FireAndForgetProcessEvent =
+  | {
+      readonly generation: number;
+      readonly identity: ProcessIdentity;
+      readonly kind: "register";
+      readonly stepId: string;
+      readonly stepIndex: number;
+    }
+  | {
+      readonly generation: number;
+      readonly identity: ProcessIdentity;
+      readonly kind: "accept";
+      readonly stepId: string;
+      readonly stepIndex: number;
+    }
+  | {
+      readonly exitCode: number | null;
+      readonly generation: number;
+      readonly identity: ProcessIdentity;
+      readonly kind: "finish";
+      readonly outcome: FireAndForgetProcessOutcome;
+      readonly signal: NodeJS.Signals | null;
+      readonly stepId: string;
+      readonly stepIndex: number;
+    };
 
 export type SecretTransactionPhase =
   | "prepared"
@@ -36,6 +92,10 @@ export type RunnerDiagnosticCode =
   | "prompt-cleanup-failed"
   | "prompt-hydration-failed"
   | "provider-execution-failed"
+  | "fire-and-forget-launch-failed"
+  | "fire-and-forget-early-exit"
+  | "fire-and-forget-process-exited"
+  | "fire-and-forget-reconciliation-failed"
   | "secret-transaction-failed"
   | "state-persistence-failed"
   | "manual-intervention-required";
@@ -69,6 +129,7 @@ export type TerminalCheckpoint =
 
 export interface RunnerCheckpoint {
   readonly currentStep: StepCheckpoint | null;
+  readonly fireAndForgetProcesses: readonly FireAndForgetProcessCheckpoint[];
   readonly plan: RunnerPlanIdentity;
   readonly revision: number;
   readonly schemaVersion: typeof RUNNER_CHECKPOINT_SCHEMA_VERSION;

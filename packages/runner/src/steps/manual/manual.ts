@@ -49,6 +49,7 @@ type ForegroundOutcome =
   | { readonly status: "failed" };
 
 type WaitOutcome =
+  | { readonly status: "canceled" }
   | { readonly status: "delay-elapsed" }
   | {
       readonly outcome: ForegroundOutcome;
@@ -57,6 +58,9 @@ type WaitOutcome =
 
 const completed = (result: SpawnResult): boolean =>
   result.reason === "exit" && result.exitCode === 0 && result.signal === null;
+
+const isCanceled = (cancellation: AbortSignal | undefined): boolean =>
+  cancellation?.aborted === true;
 
 const failure = (
   code: ManualFailureCode,
@@ -90,10 +94,14 @@ export class ManualStepExecutor {
     step: ManualStep,
     environment: ChildEnvironment,
     resumed: boolean,
+    cancellation?: AbortSignal,
     onProgress?: (progress: ManualStepProgress) => void,
   ): Promise<ManualAttemptResult> {
+    if (isCanceled(cancellation)) return failure("manual-command-failed");
+
     let check = 1;
-    const existing = await this.#checkCompletion(step, environment);
+    const existing = await this.#checkCompletion(step, environment, cancellation);
+    if (isCanceled(cancellation)) return failure("manual-command-failed");
     if (existing.status === "completed") {
       onProgress?.({ check, status: "completed" });
       return { status: "succeeded" };
@@ -106,6 +114,7 @@ export class ManualStepExecutor {
     try {
       foreground = this.#commandHost.spawn({
         arguments: step.command.arguments,
+        ...(cancellation === undefined ? {} : { cancellation }),
         cwd: this.#environment.workingDirectoryFor(step.command),
         environment,
         executable: step.command.executable,
@@ -132,14 +141,26 @@ export class ManualStepExecutor {
     for (;;) {
       let wait: WaitOutcome;
       try {
-        wait = await this.#waitForForegroundOrDelay(foregroundOutcome, delayMs);
+        wait = await this.#waitForForegroundOrDelay(
+          foregroundOutcome,
+          delayMs,
+          cancellation,
+        );
       } catch {
         await this.#stopForeground(foreground, foregroundOutcome);
         return failure("manual-completion-check-failed");
       }
+      if (wait.status === "canceled") {
+        await this.#stopForeground(foreground, foregroundOutcome);
+        return failure("manual-command-failed");
+      }
 
       check += 1;
-      const probe = await this.#checkCompletion(step, environment);
+      const probe = await this.#checkCompletion(step, environment, cancellation);
+      if (isCanceled(cancellation)) {
+        await this.#stopForeground(foreground, foregroundOutcome);
+        return failure("manual-command-failed");
+      }
       if (probe.status === "completed") {
         await this.#stopForeground(foreground, foregroundOutcome);
         onProgress?.({ check, status: "completed" });
@@ -169,10 +190,12 @@ export class ManualStepExecutor {
   async #checkCompletion(
     step: ManualStep,
     environment: ChildEnvironment,
+    cancellation?: AbortSignal,
   ): Promise<CompletionCheckResult> {
     try {
       const running = this.#commandHost.spawn({
         arguments: step.completionCheck.arguments,
+        ...(cancellation === undefined ? {} : { cancellation }),
         cwd: this.#environment.workingDirectoryFor(step.completionCheck),
         environment,
         executable: step.completionCheck.executable,
@@ -200,8 +223,19 @@ export class ManualStepExecutor {
   async #waitForForegroundOrDelay(
     foreground: Promise<ForegroundOutcome>,
     delayMs: number,
+    cancellation?: AbortSignal,
   ): Promise<WaitOutcome> {
     const controller = new AbortController();
+    let cancelWait: (() => void) | undefined;
+    const canceled = cancellation === undefined
+      ? undefined
+      : new Promise<WaitOutcome>((resolve) => {
+        cancelWait = (): void => {
+          resolve({ status: "canceled" });
+        };
+        if (cancellation.aborted) cancelWait();
+        else cancellation.addEventListener("abort", cancelWait, { once: true });
+      });
     try {
       return await Promise.race([
         foreground.then(
@@ -210,9 +244,13 @@ export class ManualStepExecutor {
         this.#scheduler.sleep(delayMs, controller.signal).then(
           (): WaitOutcome => ({ status: "delay-elapsed" }),
         ),
+        ...(canceled === undefined ? [] : [canceled]),
       ]);
     } finally {
       controller.abort();
+      if (cancelWait !== undefined) {
+        cancellation?.removeEventListener("abort", cancelWait);
+      }
     }
   }
 }

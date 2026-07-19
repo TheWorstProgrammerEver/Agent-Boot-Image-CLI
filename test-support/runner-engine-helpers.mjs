@@ -52,6 +52,11 @@ export const createEngineFixture = async (steps, options = {}) => {
       homeDirectory: "/home/my-user",
       workingDirectory: "/home/my-user/workspace",
     },
+    fireAndForgetPolicy: {
+      acceptanceWindowMs: 10,
+      maxLaunchAttempts: 3,
+      terminationGraceMs: 100,
+    },
     manualPolicy: {
       completionCheckTimeoutMs: 5_000,
       maximumPollIntervalMs: 8_000,

@@ -6,12 +6,15 @@ import type {
   ManualStepPolicy,
   ProviderStepPolicy,
 } from "./model.js";
+import type { FireAndForgetPolicy } from "../steps/fire-and-forget/index.js";
 
 const MAX_AUTOMATIC_ATTEMPTS = 100;
 const MAX_AUTOMATIC_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
 const MAX_MANUAL_POLL_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const MAX_MANUAL_CHECK_TIMEOUT_MS = 60 * 60 * 1_000;
 const MAX_PROVIDER_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
+const MAX_ACCEPTANCE_WINDOW_MS = 60_000;
+const MAX_TERMINATION_GRACE_MS = 60_000;
 
 const validatePositiveInteger = (field: string, value: number, maximum: number): void => {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
@@ -53,6 +56,24 @@ export const validateProviderPolicy = (policy: ProviderStepPolicy): void => {
     "providerPolicy.timeoutMs",
     policy.timeoutMs,
     MAX_PROVIDER_TIMEOUT_MS,
+  );
+};
+
+export const validateFireAndForgetPolicy = (policy: FireAndForgetPolicy): void => {
+  validatePositiveInteger(
+    "fireAndForgetPolicy.acceptanceWindowMs",
+    policy.acceptanceWindowMs,
+    MAX_ACCEPTANCE_WINDOW_MS,
+  );
+  validatePositiveInteger(
+    "fireAndForgetPolicy.maxLaunchAttempts",
+    policy.maxLaunchAttempts,
+    MAX_AUTOMATIC_ATTEMPTS,
+  );
+  validatePositiveInteger(
+    "fireAndForgetPolicy.terminationGraceMs",
+    policy.terminationGraceMs,
+    MAX_TERMINATION_GRACE_MS,
   );
 };
 
