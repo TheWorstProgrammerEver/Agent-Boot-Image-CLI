@@ -52,3 +52,24 @@ without writing output.
 Additional synthesis exit codes are `5` for rejected synthesis input, `6` for
 existing output without `--replace`, and `7` for an operational or atomic-output
 failure.
+
+# `create-agent drives list`
+
+Inspect Linux block-device topology without mutating devices:
+
+```console
+create-agent drives list
+```
+
+The command reports whole disks, exact `/dev/disk/by-id` aliases, size, model,
+transport, removable status, and redacted serial presence. It marks the active
+system disk, mounted descendants, non-removable disks, and disks without a
+stable alias as blocked. Mount paths and standalone serial fields are omitted.
+The later image command must still run the complete preflight; list output is
+orientation, not authorization.
+
+The exported image-target guardrail API requires an explicit by-id target plus
+expected model, serial, removable status, transport, and maximum size. It prints
+a redacted plan before interactive acknowledgement or `--yes`, then resolves
+and rechecks the complete target identity immediately before entering the
+downstream lock callback. This package does not implement unmounting or writes.

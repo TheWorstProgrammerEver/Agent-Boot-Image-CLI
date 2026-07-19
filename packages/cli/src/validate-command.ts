@@ -1,3 +1,6 @@
+import type { DriveInspector } from "@agent-boot/os-linux";
+
+import { runDrivesListCommand } from "./drives/command.js";
 import {
   DefinitionLoaderError,
   IncompatibleDefinitionError,
@@ -19,6 +22,7 @@ export const CREATE_AGENT_EXIT_CODE = {
   invalidSynthesisInput: 5,
   outputExists: 6,
   synthesisFailure: 7,
+  driveInspectionFailure: 8,
 } as const;
 
 export type ValidationExitCode =
@@ -32,6 +36,10 @@ export interface CommandIo {
   readonly stderr: (line: string) => void;
 }
 
+export interface CreateAgentDependencies {
+  readonly driveInspector?: DriveInspector;
+}
+
 const TRUST_WARNING =
   "WARNING: TypeScript definitions and their imports are trusted executable code.";
 
@@ -41,7 +49,16 @@ const locationSuffix = (error: DefinitionLoaderError): string =>
 export const runCreateAgent = async (
   arguments_: readonly string[],
   io: CommandIo,
+  dependencies: CreateAgentDependencies = {},
 ): Promise<CreateAgentExitCode> => {
+  if (arguments_.length === 2 && arguments_[0] === "drives" && arguments_[1] === "list") {
+    if (dependencies.driveInspector === undefined) {
+      io.stderr("Drive inspection is unavailable in this CLI composition.");
+      return CREATE_AGENT_EXIT_CODE.driveInspectionFailure;
+    }
+    return runDrivesListCommand(dependencies.driveInspector, io);
+  }
+
   if (arguments_[0] === "synth") {
     io.stderr(TRUST_WARNING);
     return runSynthCommand(arguments_.slice(1), io);
@@ -53,7 +70,7 @@ export const runCreateAgent = async (
       ? arguments_[2]
       : undefined;
   if (definitionPath === undefined) {
-    io.stderr("Usage: create-agent validate [--definition] <definition.ts>");
+    io.stderr("Usage: create-agent validate [--definition] <definition.ts> | synth ... | drives list");
     return VALIDATION_EXIT_CODE.usage;
   }
 
