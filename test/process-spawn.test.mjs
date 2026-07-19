@@ -51,6 +51,41 @@ test('spawn preserves arguments and environment while streaming both outputs', a
   assert.deepEqual(result, { exitCode: 0, reason: 'exit', signal: null });
 });
 
+test('spawn writes deliberate stdin without exposing it in command diagnostics', async () => {
+  const marker = 'provider-prompt-private-marker';
+  const chunks = [];
+  const running = new NodeSpawnAdapter().spawn(streamedCommand([
+    "process.stdin.setEncoding('utf8');",
+    "let input = '';",
+    "process.stdin.on('data', chunk => { input += chunk; });",
+    "process.stdin.on('end', () => process.stdout.write(String(input.length)));",
+  ].join(''), {
+    onOutput: chunk => chunks.push(chunk),
+    stdin: marker,
+  }));
+
+  assert.equal((await running.completion).exitCode, 0);
+  assert.equal(Buffer.concat(chunks.map(chunk => chunk.data)).toString(), String(marker.length));
+});
+
+test('spawn rejects deliberate stdin with inherited stdio before launch', () => {
+  let spawnCalls = 0;
+  const adapter = new NodeSpawnAdapter({
+    spawnProcess: () => {
+      spawnCalls += 1;
+      throw new Error('must not spawn');
+    },
+  });
+
+  assert.throws(() => adapter.spawn({
+    executable: executableNode,
+    lifetime: { policy: 'managed' },
+    stdin: 'private',
+    stdio: 'inherit',
+  }), /deliberate stdin/u);
+  assert.equal(spawnCalls, 0);
+});
+
 test('spawn selects inherited TTY mode and explicit detached lifetime', async () => {
   let spawnOptions;
   let unrefCalled = false;

@@ -1,9 +1,9 @@
 # `@agent-boot/runner`
 
-`RunnerEngine` validates the exact serialized runner plan before execution and currently accepts
-environment, foreground automatic, and physical-console manual steps. A plan containing a later
-executor kind fails as incompatible before any command starts, so adding fire-and-forget, prompt,
-provider, and secret executors cannot accidentally produce a partial run.
+`RunnerEngine` validates the exact serialized runner plan before execution and accepts environment,
+foreground automatic, physical-console manual, prompt, and provider steps when their executors are
+configured. A plan containing a later executor kind fails as incompatible before any command
+starts, so adding fire-and-forget and secret executors cannot accidentally produce a partial run.
 
 The engine snapshots its configured account home, default working directory, and base `PATH`.
 Completed environment set/unset operations are deterministically replayed from the immutable plan
@@ -25,6 +25,24 @@ success checkpoint; an exited command without a successful final probe, a start 
 infrastructure failure becomes a redacted terminal diagnostic. Progress events distinguish waiting,
 probe retry, completion, and terminal failure without carrying commands, arguments, output, or
 environment values.
+
+Prompt templates and immutable assets resolve only from IDs declared by the assembly manifest. The
+resolver rejects traversal and symlink components, requires regular files, and verifies manifest
+digests (plus asset byte lengths) before hydration. Variable bindings resolve only from the replayed
+public environment or an injected `secretId` resolver. Unresolved, malformed, missing, or modified
+inputs fail with bounded diagnostics that contain no substitution values.
+
+Rendered prompts are atomically materialized beneath `/run/agent-boot/prompts/<agent-id>` through a
+mode `0600` file and mode `0700` directories. The runner removes each file before provider launch
+after retaining its bytes for structured stdin, and removes the agent runtime directory on every
+exit path. A provider step always rehydrates its producing prompt, so a reboot that clears `/run`
+regenerates the input without checkpointing prompt content or paths.
+
+Provider execution depends on the provider-neutral `ProviderDescriptorAdapter` boundary. The first
+adapter maps a serialized Codex descriptor to a managed process with deliberate cwd, inherited
+runner environment, timeout, signals, streamed/discarded output, and hydrated stdin. Codex is not a
+runner-plan discriminator and the sequence engine does not import its adapter. Provider output,
+prompt input, command arguments, and environment values never enter progress or checkpoint state.
 
 The checkpoint store persists only recovery-critical state. It records the exact runner-plan
 identity, monotonic step attempts, secret-install transaction phases, terminal outcome, and

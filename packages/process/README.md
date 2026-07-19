@@ -42,7 +42,9 @@ streamed or inherited stdio and an explicit lifetime policy:
 Managed and referenced-detached commands return a `RunningCommand` with a
 completion promise, cancellation, and direct signal methods. Optional parent
 signal forwarding is installed only for the command lifetime and removed on
-completion.
+completion. Streamed commands may provide deliberate string or byte-array
+stdin; this cannot be combined with inherited stdio, and stdin is omitted from
+all command representations and diagnostics.
 
 ## Redaction and tests
 

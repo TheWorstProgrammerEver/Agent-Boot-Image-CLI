@@ -33,6 +33,9 @@ export type RunnerDiagnosticCode =
   | "manual-command-failed"
   | "manual-completion-check-failed"
   | "manual-gate-incomplete"
+  | "prompt-cleanup-failed"
+  | "prompt-hydration-failed"
+  | "provider-execution-failed"
   | "secret-transaction-failed"
   | "state-persistence-failed"
   | "manual-intervention-required";

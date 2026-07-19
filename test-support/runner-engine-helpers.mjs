@@ -9,10 +9,10 @@ export const successfulSpawn = {
   result: { exitCode: 0, reason: "exit", signal: null },
 };
 
-export const serializePlan = steps =>
+export const serializePlan = (steps, providers = []) =>
   `${JSON.stringify({
     agentId: "test-agent",
-    providers: [],
+    providers,
     schemaVersion: 1,
     steps,
   })}\n`;
@@ -38,7 +38,7 @@ export const automaticStep = (id = "run-tool", command = {}) => ({
 export const createEngineFixture = async (steps, options = {}) => {
   const root = await mkdtemp(join(tmpdir(), "agent-boot-runner-engine-"));
   const path = join(root, "state", "runner-checkpoint.json");
-  const serializedPlan = serializePlan(steps);
+  const serializedPlan = serializePlan(steps, options.providers);
   const host = options.host ?? new FakeCommandHost();
   const store = options.store ?? new RunnerStateStore({
     clock: new TestClock("2026-07-19T00:00:00.000Z"),

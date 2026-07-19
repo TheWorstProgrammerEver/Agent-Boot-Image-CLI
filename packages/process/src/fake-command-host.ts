@@ -34,6 +34,9 @@ const cloneExecCommand = (command: BoundedExecCommand): BoundedExecCommand => ({
 const cloneSpawnCommand = (command: SpawnCommand): SpawnCommand => ({
   ...cloneExecCommand(command),
   ...(command.forwardSignals === undefined ? {} : { forwardSignals: [...command.forwardSignals] }),
+  ...(command.stdin === undefined
+    ? {}
+    : { stdin: typeof command.stdin === 'string' ? command.stdin : cloneBytes(command.stdin) }),
   lifetime: { ...command.lifetime },
   stdio: command.stdio,
 });

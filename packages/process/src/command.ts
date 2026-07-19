@@ -35,6 +35,8 @@ export type SpawnLifetime =
 export interface SpawnCommand extends CommandDescriptor {
   readonly cancellation?: AbortSignal;
   readonly forwardSignals?: readonly NodeJS.Signals[];
+  /** Deliberate child stdin. It is never included in command representations or diagnostics. */
+  readonly stdin?: string | Uint8Array;
   readonly lifetime: SpawnLifetime;
   readonly onOutput?: (chunk: SpawnOutputChunk) => void;
   readonly stdio: 'inherit' | 'stream';
