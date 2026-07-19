@@ -34,14 +34,15 @@ export class AutomaticStepExecutor {
   async execute(
     step: AutomaticStep,
     environment: ChildEnvironment,
+    cancellation?: AbortSignal,
   ): Promise<AutomaticAttemptResult> {
     try {
       const running = this.#commandHost.spawn({
         arguments: step.command.arguments,
+        ...(cancellation === undefined ? {} : { cancellation }),
         cwd: this.#environment.workingDirectoryFor(step.command),
         environment,
         executable: step.command.executable,
-        forwardSignals: ["SIGHUP", "SIGINT", "SIGTERM"],
         label: `runner step ${step.id}`,
         lifetime: { policy: "managed" },
         stdio: "inherit",

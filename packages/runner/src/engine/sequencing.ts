@@ -14,6 +14,7 @@ export const findUnsupportedStep = (
       step.kind !== "environment" &&
       step.kind !== "automatic" &&
       step.kind !== "manual" &&
+      step.kind !== "fire-and-forget" &&
       !(step.kind === "prompt" && support.prompt) &&
       !(step.kind === "provider" && support.provider),
   );
@@ -23,14 +24,32 @@ export const findRecoveryConflict = (
   steps: readonly RunnerStep[],
 ): RunnerDiagnostic | undefined => {
   const current = state.currentStep;
-  if (current === null) return undefined;
-  const planned = steps[current.index];
-  if (planned !== undefined && planned.id === current.id) return undefined;
-  return {
-    code: "manual-intervention-required",
-    recovery: "manual-intervention",
-    stepId: current.id,
-  };
+  if (current !== null) {
+    const planned = steps[current.index];
+    if (planned === undefined || planned.id !== current.id) {
+      return {
+        code: "manual-intervention-required",
+        recovery: "manual-intervention",
+        stepId: current.id,
+      };
+    }
+  }
+  for (const process of state.fireAndForgetProcesses) {
+    const planned = steps[process.stepIndex];
+    if (
+      planned?.kind !== "fire-and-forget" ||
+      planned.id !== process.stepId ||
+      current === null ||
+      process.stepIndex > current.index
+    ) {
+      return {
+        code: "manual-intervention-required",
+        recovery: "manual-intervention",
+        stepId: process.stepId,
+      };
+    }
+  }
+  return undefined;
 };
 
 export interface PendingStep {

@@ -1,6 +1,8 @@
 import { StateTransitionError } from "./errors.js";
 import {
   RUNNER_CHECKPOINT_SCHEMA_VERSION,
+  type FireAndForgetProcessCheckpoint,
+  type FireAndForgetProcessEvent,
   type RunnerCheckpoint,
   type RunnerDiagnostic,
   type RunnerPlanIdentity,
@@ -27,6 +29,7 @@ export const initializeCheckpoint = (
 ): RunnerCheckpoint =>
   parseRunnerCheckpoint({
     currentStep: null,
+    fireAndForgetProcesses: [],
     plan,
     revision: 0,
     schemaVersion: RUNNER_CHECKPOINT_SCHEMA_VERSION,
@@ -34,6 +37,91 @@ export const initializeCheckpoint = (
     terminal: null,
     updatedAt,
   });
+
+const sameProcessIdentity = (
+  left: FireAndForgetProcessCheckpoint["identity"],
+  right: FireAndForgetProcessCheckpoint["identity"],
+): boolean =>
+  left.bootId === right.bootId &&
+  left.pid === right.pid &&
+  left.processGroupId === right.processGroupId &&
+  left.startTimeTicks === right.startTimeTicks;
+
+const sameProcessEvent = (
+  process: FireAndForgetProcessCheckpoint,
+  event: FireAndForgetProcessEvent,
+): boolean =>
+  process.generation === event.generation &&
+  process.stepId === event.stepId &&
+  process.stepIndex === event.stepIndex &&
+  sameProcessIdentity(process.identity, event.identity);
+
+export const transitionFireAndForgetProcess = (
+  state: RunnerCheckpoint,
+  event: FireAndForgetProcessEvent,
+  updatedAt: string,
+): RunnerCheckpoint => {
+  const index = state.fireAndForgetProcesses.findIndex(
+    (process) => process.stepId === event.stepId,
+  );
+  const current = state.fireAndForgetProcesses[index];
+  let next: FireAndForgetProcessCheckpoint;
+
+  if (event.kind === "register") {
+    requireActive(state);
+    const expectedGeneration = current === undefined ? 1 : current.generation + 1;
+    if (event.generation !== expectedGeneration) {
+      throw new StateTransitionError("process generations must advance one at a time");
+    }
+    if (current !== undefined && current.phase !== "finished") {
+      throw new StateTransitionError("an active process must finish before replacement");
+    }
+    next = {
+      generation: event.generation,
+      identity: event.identity,
+      lifetime: "runner",
+      phase: "registered",
+      registeredAt: updatedAt,
+      stepId: event.stepId,
+      stepIndex: event.stepIndex,
+    };
+  } else {
+    if (current === undefined || !sameProcessEvent(current, event)) {
+      throw new StateTransitionError("process events must match the active stable identity");
+    }
+    if (event.kind === "accept") {
+      requireActive(state);
+      if (current.phase === "accepted") return state;
+      if (current.phase !== "registered") {
+        throw new StateTransitionError("only a registered process can be accepted");
+      }
+      next = { ...current, acceptedAt: updatedAt, phase: "accepted" };
+    } else {
+      requireActive(state);
+      if (current.phase === "finished") {
+        const sameFinish =
+          current.exitCode === event.exitCode &&
+          current.outcome === event.outcome &&
+          current.signal === event.signal;
+        if (sameFinish) return state;
+        throw new StateTransitionError("a finished process outcome is immutable");
+      }
+      next = {
+        ...current,
+        exitCode: event.exitCode,
+        finishedAt: updatedAt,
+        outcome: event.outcome,
+        phase: "finished",
+        signal: event.signal,
+      };
+    }
+  }
+
+  const processes = [...state.fireAndForgetProcesses];
+  if (index === -1) processes.push(next);
+  else processes[index] = next;
+  return changed(state, updatedAt, { fireAndForgetProcesses: processes });
+};
 
 const sameStep = (left: StepCheckpoint, right: StepCheckpoint): boolean =>
   left.attempt === right.attempt &&

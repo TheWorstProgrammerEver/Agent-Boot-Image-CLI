@@ -20,3 +20,10 @@ export class RunnerConfigurationError extends Error {
     this.name = "RunnerConfigurationError";
   }
 }
+
+export class RunnerInterruptedError extends Error {
+  constructor() {
+    super("Runner execution was interrupted; supervised processes were stopped.");
+    this.name = "RunnerInterruptedError";
+  }
+}

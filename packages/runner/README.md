@@ -1,9 +1,10 @@
 # `@agent-boot/runner`
 
 `RunnerEngine` validates the exact serialized runner plan before execution and accepts environment,
-foreground automatic, physical-console manual, prompt, and provider steps when their executors are
-configured. A plan containing a later executor kind fails as incompatible before any command
-starts, so adding fire-and-forget and secret executors cannot accidentally produce a partial run.
+foreground automatic, physical-console manual, runner-lifetime fire-and-forget, prompt, and provider
+steps when their executors are configured. A plan containing a later executor kind fails as
+incompatible before any command starts, so adding secret executors cannot accidentally produce a
+partial run.
 
 The engine snapshots its configured account home, default working directory, and base `PATH`.
 Completed environment set/unset operations are deterministically replayed from the immutable plan
@@ -44,9 +45,20 @@ runner environment, timeout, signals, streamed/discarded output, and hydrated st
 runner-plan discriminator and the sequence engine does not import its adapter. Provider output,
 prompt input, command arguments, and environment values never enter progress or checkpoint state.
 
+Fire-and-forget launch is accepted only after the managed child leads an isolated process group,
+its Linux boot ID/PID/process-group/start-tick identity is durably registered, and that identity
+survives a bounded acceptance window. The checkpoint excludes executable arguments, environment,
+output, and exception text. Same-boot recovery adopts a matching accepted identity to suppress
+duplicates and treats a missing accepted identity as a later process failure. Reboot recovery
+relaunches completed runner-lifetime steps only while the overall sequence remains unfinished.
+Every tracked or adopted child is stopped before runner success, failure, or cancellation returns.
+The lifecycle policy and unsupported durable-lifetime boundary are recorded in
+[ADR 0008](../../docs/architecture/0008-fire-and-forget-lifecycle.md).
+
 The checkpoint store persists only recovery-critical state. It records the exact runner-plan
-identity, monotonic step attempts, secret-install transaction phases, terminal outcome, and
-structured diagnostics that cannot contain command output or secret values.
+identity, monotonic step attempts, stable fire-and-forget process metadata, secret-install
+transaction phases, terminal outcome, and structured diagnostics that cannot contain command
+output or secret values.
 
 On Linux, each update writes a mode `0600` temporary file in the checkpoint directory, syncs the
 file, renames it over the checkpoint, and syncs the directory. Before cleanup, reads, or writes, the

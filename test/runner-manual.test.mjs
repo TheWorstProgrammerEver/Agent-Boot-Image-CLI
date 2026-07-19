@@ -330,6 +330,11 @@ test("manual polling configuration rejects unbounded values before state or proc
       homeDirectory: "/home/my-user",
       workingDirectory: "/home/my-user",
     },
+    fireAndForgetPolicy: {
+      acceptanceWindowMs: 10,
+      maxLaunchAttempts: 1,
+      terminationGraceMs: 100,
+    },
     serializedPlan: serializePlan([manualStep()]),
     stateStore,
   };

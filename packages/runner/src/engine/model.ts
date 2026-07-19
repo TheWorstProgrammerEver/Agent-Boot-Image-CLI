@@ -4,13 +4,22 @@ import type { PromptHydrator } from "../prompts/index.js";
 import type { ProviderDescriptorAdapter } from "../providers/adapter.js";
 
 import type {
+  FireAndForgetProcessEvent,
   RunnerCheckpoint,
   RunnerDiagnostic,
   RunnerPlanIdentity,
   StepCheckpoint,
 } from "../state/index.js";
+import type {
+  FireAndForgetPolicy,
+  ProcessIdentityHost,
+} from "../steps/fire-and-forget/index.js";
 
 export interface RunnerCheckpointStore {
+  checkpointFireAndForgetProcess(
+    plan: RunnerPlanIdentity,
+    event: FireAndForgetProcessEvent,
+  ): Promise<RunnerCheckpoint>;
   checkpointStep(
     plan: RunnerPlanIdentity,
     checkpoint: StepCheckpoint,
@@ -94,14 +103,18 @@ export type RunnerProgress =
 
 export interface RunnerEngineOptions {
   readonly automaticPolicy: AutomaticStepPolicy;
+  readonly cancellation?: AbortSignal;
   readonly commandHost: SpawnHost;
   readonly environment: RunnerEnvironmentOptions;
+  readonly fireAndForgetPolicy: FireAndForgetPolicy;
+  readonly lifecycleWait?: (milliseconds: number) => Promise<void>;
   readonly manualPolicy: ManualStepPolicy;
   readonly manualScheduler?: ManualStepScheduler;
   readonly onProgress?: (progress: RunnerProgress) => void;
   readonly promptHydrator?: PromptHydrator;
   readonly providerAdapter?: ProviderDescriptorAdapter;
   readonly providerPolicy?: ProviderStepPolicy;
+  readonly processIdentityHost?: ProcessIdentityHost;
   readonly serializedPlan: string | Uint8Array;
   readonly stateStore: RunnerCheckpointStore;
 }
