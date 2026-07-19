@@ -11,6 +11,16 @@ const missingProcess = (error: unknown): boolean =>
   (error as NodeJS.ErrnoException).code === "ENOENT" ||
   (error as NodeJS.ErrnoException).code === "ESRCH";
 
+const processGroupExists = (processGroupId: number): boolean => {
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    if (missingProcess(error)) return false;
+    throw error;
+  }
+};
+
 const parseStat = (contents: string): {
   processGroupId: number;
   running: boolean;
@@ -84,15 +94,14 @@ export class LinuxProcessIdentityHost implements ProcessIdentityHost {
       if (missingProcess(error)) return true;
       throw error;
     }
-    if (await this.#waitForExit(identity, graceMs)) return true;
-    if (!(await this.matches(identity))) return true;
+    if (await this.#waitForGroupExit(identity.processGroupId, graceMs)) return true;
     try {
       process.kill(-identity.processGroupId, "SIGKILL");
     } catch (error) {
       if (missingProcess(error)) return true;
       throw error;
     }
-    return this.#waitForExit(identity, graceMs);
+    return this.#waitForGroupExit(identity.processGroupId, graceMs);
   }
 
   async #readBootId(): Promise<string> {
@@ -104,12 +113,12 @@ export class LinuxProcessIdentityHost implements ProcessIdentityHost {
     return this.#bootId;
   }
 
-  async #waitForExit(identity: ProcessIdentity, graceMs: number): Promise<boolean> {
+  async #waitForGroupExit(processGroupId: number, graceMs: number): Promise<boolean> {
     const deadline = Date.now() + graceMs;
     while (Date.now() < deadline) {
-      if (!(await this.matches(identity))) return true;
+      if (!processGroupExists(processGroupId)) return true;
       await wait(Math.min(10, Math.max(1, deadline - Date.now())));
     }
-    return !(await this.matches(identity));
+    return !processGroupExists(processGroupId);
   }
 }

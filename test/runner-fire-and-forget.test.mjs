@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { execPath } from "node:process";
 import test from "node:test";
 
 import { NodeSpawnAdapter } from "@agent-boot/process";
 import {
   RunnerInterruptedError,
+  LinuxProcessIdentityHost,
   RunnerPlanError,
   identifyRunnerPlan,
 } from "@agent-boot/runner";
@@ -21,11 +23,50 @@ import {
   createEngineFixture,
   successfulSpawn,
 } from "../test-support/runner-engine-helpers.mjs";
+import {
+  processIsRunning,
+  waitFor,
+} from "../test-support/process-test-helpers.mjs";
 
 const policy = {
   acceptanceWindowMs: 10,
   maxLaunchAttempts: 1,
   terminationGraceMs: 100,
+};
+
+const seedPriorBootLaunch = async (fixture, identityHost, phase) => {
+  const identity = identifyRunnerPlan(
+    { agentId: "test-agent", schemaVersion: 1 },
+    fixture.serializedPlan,
+  );
+  const processIdentity = identityHost.add(801, PRIOR_BOOT_ID);
+  await fixture.store.initialize(identity);
+  await fixture.store.checkpointStep(identity, {
+    attempt: 1,
+    id: "start-support",
+    index: 0,
+    phase: "started",
+  });
+  await fixture.store.checkpointFireAndForgetProcess(identity, {
+    generation: 1,
+    identity: processIdentity,
+    kind: "register",
+    stepId: "start-support",
+    stepIndex: 0,
+  });
+  if (phase === "failed") {
+    await fixture.store.checkpointFireAndForgetProcess(identity, {
+      exitCode: 17,
+      generation: 1,
+      identity: processIdentity,
+      kind: "finish",
+      outcome: "exited-before-acceptance",
+      signal: null,
+      stepId: "start-support",
+      stepIndex: 0,
+    });
+  }
+  identityHost.remove(801);
 };
 
 test("launch errors and pre-acceptance exits have distinct redacted failures", async () => {
@@ -252,6 +293,48 @@ test("a harmless real child is accepted and fully cleaned up", async () => {
   }
 });
 
+test("adopted cleanup escalates when a resistant descendant outlives its leader", async () => {
+  const descendant = [
+    "process.on('SIGTERM', () => {});",
+    "process.stdout.write('ready:' + String(process.pid) + '\\n');",
+    "setInterval(() => {}, 1000);",
+  ].join("");
+  const leader = [
+    "const { spawn } = require('node:child_process');",
+    `spawn(process.execPath, ['--eval', ${JSON.stringify(descendant)}], { stdio: ['ignore', 1, 2] });`,
+    "setInterval(() => {}, 1000);",
+  ].join("");
+  const running = spawn(execPath, ["--eval", leader], {
+    detached: true,
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const closed = new Promise(resolve => running.once("close", resolve));
+  let output = "";
+  running.stdout.setEncoding("utf8");
+  running.stdout.on("data", chunk => { output += chunk; });
+
+  try {
+    await waitFor(() => /^ready:\d+\n$/u.test(output));
+    const descendantPid = Number.parseInt(output.slice("ready:".length), 10);
+    const identityHost = new LinuxProcessIdentityHost();
+    const identity = await identityHost.capture(running.pid);
+    assert.notEqual(identity, undefined);
+
+    const stopped = await identityHost.terminate(identity, "SIGTERM", 50);
+
+    assert.equal(stopped, true);
+    await waitFor(() => !processIsRunning(descendantPid));
+    assert.equal(processIsRunning(descendantPid), false);
+  } finally {
+    try {
+      globalThis.process.kill(-running.pid, "SIGKILL");
+    } catch (error) {
+      assert.equal(error.code, "ESRCH");
+    }
+    await closed;
+  }
+});
+
 test("same-boot recovery suppresses duplicates while reboot recovery relaunches", async () => {
   for (const scenario of [
     { bootId: CURRENT_BOOT_ID, expectedFireLaunches: 0, name: "same boot" },
@@ -317,5 +400,57 @@ test("same-boot recovery suppresses duplicates while reboot recovery relaunches"
     } finally {
       await fixture.cleanup();
     }
+  }
+});
+
+test("prior-boot launch checkpoints consume their attempt before a safe relaunch", async () => {
+  for (const scenario of ["registered", "failed"]) {
+    const identityHost = createIdentityHost();
+    const host = new ScriptedSpawnHost(identityHost).scriptRunning(802);
+    const fixture = await createEngineFixture([fireAndForgetStep()], {
+      engineOptions: {
+        fireAndForgetPolicy: { ...policy, maxLaunchAttempts: 2 },
+        lifecycleWait: async () => undefined,
+        processIdentityHost: identityHost,
+      },
+      host,
+    });
+    try {
+      await seedPriorBootLaunch(fixture, identityHost, scenario);
+
+      const result = await fixture.engine.run();
+
+      assert.equal(result.status, "succeeded", scenario);
+      assert.equal(result.state.currentStep.attempt, 2, scenario);
+      assert.equal(result.state.fireAndForgetProcesses[0].generation, 2, scenario);
+      assert.equal(host.spawnCalls.length, 1, scenario);
+    } finally {
+      await fixture.cleanup();
+    }
+  }
+});
+
+test("reboot recovery cannot replay an exhausted failed launch", async () => {
+  const identityHost = createIdentityHost();
+  const host = new ScriptedSpawnHost(identityHost);
+  const fixture = await createEngineFixture([fireAndForgetStep()], {
+    engineOptions: {
+      fireAndForgetPolicy: policy,
+      lifecycleWait: async () => undefined,
+      processIdentityHost: identityHost,
+    },
+    host,
+  });
+  try {
+    await seedPriorBootLaunch(fixture, identityHost, "failed");
+
+    const result = await fixture.engine.run();
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.state.currentStep.attempt, 1);
+    assert.equal(result.state.terminal.diagnostic.code, "fire-and-forget-early-exit");
+    assert.equal(host.spawnCalls.length, 0);
+  } finally {
+    await fixture.cleanup();
   }
 });

@@ -118,35 +118,14 @@ export class RunnerProcessLifecycle {
   ): Promise<FireAndForgetLaunchResult | { readonly state: RunnerCheckpoint; readonly status: "missing" }> {
     const process = state.fireAndForgetProcesses.find((entry) => entry.stepId === step.id);
     if (process === undefined) return { state, status: "missing" };
-    const sameBoot = await this.#supervisor.isCurrentBoot(process);
     if (process.phase === "finished") {
-      return process.outcome === "runner-shutdown" || !sameBoot
+      return process.outcome === "runner-shutdown"
         ? this.launch(state, step, process.stepIndex)
-        : {
-            diagnostic: this.#diagnostic(
-              process.acceptedAt === undefined
-                ? "fire-and-forget-early-exit"
-                : "fire-and-forget-process-exited",
-              step.id,
-            ),
-            state,
-            status: "failed",
-          };
+        : this.#failedProcess(state, process);
     }
     const resumed = await this.#supervisor.resume(state, process);
     if (resumed.status !== "missing") return resumed;
-    return sameBoot
-      ? {
-          diagnostic: this.#diagnostic(
-            process.acceptedAt === undefined
-              ? "fire-and-forget-early-exit"
-              : "fire-and-forget-process-exited",
-            step.id,
-          ),
-          state: resumed.state,
-          status: "failed",
-        }
-      : this.launch(resumed.state, step, process.stepIndex);
+    return this.#failedProcess(resumed.state, process);
   }
 
   async stopAll(
@@ -170,5 +149,21 @@ export class RunnerProcessLifecycle {
 
   #diagnostic(code: RunnerDiagnostic["code"], stepId: string): RunnerDiagnostic {
     return { code, recovery: "manual-intervention", stepId };
+  }
+
+  #failedProcess(
+    state: RunnerCheckpoint,
+    process: RunnerCheckpoint["fireAndForgetProcesses"][number],
+  ): Extract<FireAndForgetLaunchResult, { readonly status: "failed" }> {
+    return {
+      diagnostic: this.#diagnostic(
+        process.acceptedAt === undefined
+          ? "fire-and-forget-early-exit"
+          : "fire-and-forget-process-exited",
+        process.stepId,
+      ),
+      state,
+      status: "failed",
+    };
   }
 }

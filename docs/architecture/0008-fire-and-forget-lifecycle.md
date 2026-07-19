@@ -52,6 +52,10 @@ Recovery is conservative:
 - after a reboot, a completed fire-and-forget step is relaunched only when the
   overall sequence is unfinished, because runner-lifetime processes do not
   survive reboot; and
+- a registered or failed in-flight launch from a prior boot consumes its
+  recorded attempt before a safe relaunch may use the next bounded attempt;
+- an explicit runner-shutdown checkpoint may relaunch the interrupted attempt
+  because the runner proved cleanup before returning; and
 - a started step without stable process metadata is treated as ambiguous and
   consumes its launch attempt without spawning again.
 
@@ -70,7 +74,8 @@ runner service signals into the runner cancellation signal.
 - Same-boot recovery prioritizes duplicate suppression over guessing after an
   uncheckpointed spawn.
 - Reboot recovery can reconstruct commands and public environment from the
-  immutable runner plan without persisting command arguments.
+  immutable runner plan without persisting command arguments or resetting the
+  persisted launch-attempt budget.
 - Runner shutdown cannot intentionally leave these processes behind.
 - A future durable lifetime requires a new protocol value and service-manager
   ADR rather than a change to the meaning of `runner`.

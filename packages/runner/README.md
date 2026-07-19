@@ -50,7 +50,8 @@ its Linux boot ID/PID/process-group/start-tick identity is durably registered, a
 survives a bounded acceptance window. The checkpoint excludes executable arguments, environment,
 output, and exception text. Same-boot recovery adopts a matching accepted identity to suppress
 duplicates and treats a missing accepted identity as a later process failure. Reboot recovery
-relaunches completed runner-lifetime steps only while the overall sequence remains unfinished.
+relaunches completed runner-lifetime steps only while the overall sequence remains unfinished;
+registered and failed in-flight launches consume their recorded attempt before any bounded retry.
 Every tracked or adopted child is stopped before runner success, failure, or cancellation returns.
 The lifecycle policy and unsupported durable-lifetime boundary are recorded in
 [ADR 0008](../../docs/architecture/0008-fire-and-forget-lifecycle.md).
