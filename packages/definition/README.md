@@ -59,3 +59,20 @@ The canonical schema rejects unknown fields and validates identity, Unix account
 names, curated-OS compatibility selectors, environment keys, target paths,
 resource references, provider/prompt ordering, and every step variant before a
 downstream synthesizer receives the definition.
+
+## Codex vertical slice
+
+`@agent-boot/definition/providers/codex` owns the typed Codex bootstrap
+descriptor. `codexProvider()` requires an exact semver and an explicit target
+working root. It emits the pinned npm install, exact version check, account
+profile write and verification, and one of two discriminated authentication
+flows before returning the provider descriptor:
+
+- `automatic-credentials` transactionally installs a referenced `auth.json`
+  and then checks `codex login status`;
+- `manual-device-auth` uses the runner's foreground TTY step with a silent
+  `codex login status` completion probe.
+
+The provider invocation selects the verified `agent-boot` profile and also
+passes the `danger-full-access` sandbox and `never` approval policy as concrete
+CLI flags. No prompt text is used to grant first-run permissions.

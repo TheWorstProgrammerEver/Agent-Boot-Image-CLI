@@ -86,13 +86,20 @@ const providerStep = {
 
 const codexProvider = {
   command: {
-    arguments: ["exec", "-"],
+    arguments: [
+      "exec", "--profile", "agent-boot", "--strict-config",
+      "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+    ],
     executable: "codex",
     workingDirectory: { path: "workspace", scope: "user-home" },
   },
   id: "codex",
   promptTransport: "stdin",
 };
+
+const readyCodexAdapter = () => new CodexProviderAdapter({
+  ensureReady: async () => undefined,
+});
 
 const renderedPath = fixture => join(
   fixture.systemRoot,
@@ -261,7 +268,7 @@ test("provider execution regenerates the producer snapshot after reboot", async 
         automaticPolicy: { maxAttempts: 1, timeoutMs: 60_000 },
         onProgress: event => progress.push(event),
         promptHydrator: hydrator,
-        providerAdapter: new CodexProviderAdapter(),
+        providerAdapter: readyCodexAdapter(),
         providerPolicy: { timeoutMs: 120_000 },
       },
       host,
@@ -333,7 +340,7 @@ test("missing substitutions fail before provider launch with redacted diagnostic
       automaticPolicy: { maxAttempts: 1, timeoutMs: 60_000 },
       onProgress: event => progress.push(event),
       promptHydrator: hydrator,
-      providerAdapter: new CodexProviderAdapter(),
+      providerAdapter: readyCodexAdapter(),
       providerPolicy: { timeoutMs: 120_000 },
     },
     providers: [codexProvider],
@@ -364,7 +371,7 @@ test("a missing assembly template fails before provider launch", async () => {
     engineOptions: {
       automaticPolicy: { maxAttempts: 1, timeoutMs: 60_000 },
       promptHydrator: hydrator,
-      providerAdapter: new CodexProviderAdapter(),
+      providerAdapter: readyCodexAdapter(),
       providerPolicy: { timeoutMs: 120_000 },
     },
     providers: [codexProvider],
@@ -398,7 +405,7 @@ test("provider failure remains redacted and removes the ephemeral prompt", async
         { resolve: async () => secret },
         promptFixture.store,
       ),
-      providerAdapter: new CodexProviderAdapter(),
+      providerAdapter: readyCodexAdapter(),
       providerPolicy: { timeoutMs: 120_000 },
     },
     host,

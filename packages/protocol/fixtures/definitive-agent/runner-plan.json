@@ -8,6 +8,13 @@
         "executable": "codex",
         "arguments": [
           "exec",
+          "--profile",
+          "agent-boot",
+          "--strict-config",
+          "--sandbox",
+          "danger-full-access",
+          "--ask-for-approval",
+          "never",
           "-"
         ],
         "workingDirectory": {
@@ -34,61 +41,89 @@
       "value": "true"
     },
     {
-      "id": "install-codex",
+      "id": "codex-install",
       "kind": "automatic",
       "command": {
         "executable": "npm",
         "arguments": [
           "install",
           "--global",
-          "@openai/codex@<reviewed-version>"
-        ]
+          "@openai/codex@0.144.6"
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
       }
     },
     {
-      "id": "configure-codex-yolo-profile",
+      "id": "codex-verify-version",
       "kind": "automatic",
       "command": {
-        "executable": "agent-boot-configure-codex",
+        "executable": "agent-boot-codex",
         "arguments": [
-          "--sandbox-mode",
-          "danger-full-access",
-          "--approval-policy",
-          "never",
-          "--working-root",
-          "/home/my-user/workspace"
-        ]
+          "verify-version",
+          "--expected",
+          "0.144.6"
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
       }
     },
     {
-      "id": "verify-codex-yolo-profile",
+      "id": "codex-configure-profile",
       "kind": "automatic",
       "command": {
-        "executable": "agent-boot-verify-codex",
+        "executable": "agent-boot-codex",
         "arguments": [
-          "--sandbox-mode",
-          "danger-full-access",
-          "--approval-policy",
-          "never"
-        ]
+          "configure-profile"
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
       }
     },
     {
-      "id": "authenticate-codex",
+      "id": "codex-verify-profile",
+      "kind": "automatic",
+      "command": {
+        "executable": "agent-boot-codex",
+        "arguments": [
+          "verify-profile"
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
+      }
+    },
+    {
+      "id": "codex-authenticate-device",
       "kind": "manual",
       "command": {
         "executable": "codex",
         "arguments": [
           "login",
           "--device-auth"
-        ]
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
       },
       "completionCheck": {
         "executable": "codex",
         "arguments": [
           "login",
           "status"
-        ]
+        ],
+        "workingDirectory": {
+          "scope": "user-home",
+          "path": "workspace"
+        }
       },
       "pollIntervalSeconds": 2
     },

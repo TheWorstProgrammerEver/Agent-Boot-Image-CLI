@@ -45,6 +45,21 @@ runner environment, timeout, signals, streamed/discarded output, and hydrated st
 runner-plan discriminator and the sequence engine does not import its adapter. Provider output,
 prompt input, command arguments, and environment values never enter progress or checkpoint state.
 
+The Codex adapter adds a readiness boundary before it rehydrates or receives
+prompt bytes. It verifies an exact installed CLI version, atomically writes and
+verifies the account's `agent-boot.config.toml` as an owned mode `0600` file
+beneath an owned mode `0700` Codex home, and proves authentication. Automatic
+credentials may only satisfy the non-interactive status gate; they never fall
+through to an interactive login. Manual device authentication reuses the
+manual-step foreground TTY, silent probe, bounded polling, cancellation, and
+signal-forwarding contract. The final invocation has an explicit working root
+and repeats the verified full-access settings as CLI flags, so English prompt
+content is never responsible for granting first-invocation permissions.
+
+The private `agent-boot-codex` executable implements the serialized version and
+profile commands emitted by the definition package. It exposes no secret
+arguments and reduces failures to the installation/configuration gate boundary.
+
 Fire-and-forget launch is accepted only after the managed child leads an isolated process group,
 its Linux boot ID/PID/process-group/start-tick identity is durably registered, and that identity
 survives a bounded acceptance window. The checkpoint excludes executable arguments, environment,

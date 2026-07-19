@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { URL } from "node:url";
 
-import { agentDefinitionSchema } from "../packages/definition/dist/index.js";
+import {
+  agentDefinitionSchema,
+  codexProvider,
+} from "../packages/definition/dist/index.js";
 import { runnerPlanSchema } from "../packages/protocol/dist/index.js";
 
 const root = new URL("../", import.meta.url);
@@ -39,6 +42,7 @@ test("definitive fixtures conform to both canonical runtime schemas", () => {
       "automatic",
       "automatic",
       "automatic",
+      "automatic",
       "manual",
       "fire-and-forget",
       "install-user-secret",
@@ -57,6 +61,11 @@ test("definitive fixtures conform to both canonical runtime schemas", () => {
 
 test("Codex bootstrap gates provider execution in declared order", () => {
   const definition = agentDefinitionSchema.parse(JSON.parse(read(definitionFixturePath)));
+  const codex = codexProvider({
+    authentication: { kind: "manual-device-auth", pollIntervalSeconds: 2 },
+    version: "0.144.6",
+    workingRoot: { scope: "user-home", path: "workspace" },
+  });
   const stepIds = definition.steps.map((step) => step.id);
   const indexOf = (id) => {
     const index = stepIds.indexOf(id);
@@ -64,13 +73,16 @@ test("Codex bootstrap gates provider execution in declared order", () => {
     return index;
   };
 
-  assert.ok(indexOf("install-codex") < indexOf("configure-codex-yolo-profile"));
-  assert.ok(indexOf("configure-codex-yolo-profile") < indexOf("verify-codex-yolo-profile"));
-  assert.ok(indexOf("verify-codex-yolo-profile") < indexOf("authenticate-codex"));
-  assert.ok(indexOf("authenticate-codex") < indexOf("render-bootstrap-prompt"));
+  assert.ok(indexOf("codex-install") < indexOf("codex-verify-version"));
+  assert.ok(indexOf("codex-verify-version") < indexOf("codex-configure-profile"));
+  assert.ok(indexOf("codex-configure-profile") < indexOf("codex-verify-profile"));
+  assert.ok(indexOf("codex-verify-profile") < indexOf("codex-authenticate-device"));
+  assert.ok(indexOf("codex-authenticate-device") < indexOf("render-bootstrap-prompt"));
   assert.ok(indexOf("render-bootstrap-prompt") < indexOf("run-codex-bootstrap"));
 
   const provider = definition.providers[0];
+  assert.deepEqual(provider, codex.provider);
+  assert.deepEqual(definition.steps.slice(2, 7), codex.bootstrapSteps);
   assert.deepEqual(provider.command.workingDirectory, {
     scope: "user-home",
     path: "workspace",
@@ -134,5 +146,6 @@ test("example sources pass credential and local-identity pattern scans", () => {
 
   for (const pattern of forbiddenPatterns) assert.doesNotMatch(contents, pattern);
   assert.match(contents, /<network-ssid>/u);
-  assert.match(contents, /<reviewed-version>/u);
+  assert.match(contents, /@openai\/codex@0\.144\.6/u);
+  assert.doesNotMatch(contents, /<reviewed-version>/u);
 });

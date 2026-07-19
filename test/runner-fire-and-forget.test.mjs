@@ -63,7 +63,10 @@ const providerStep = {
 
 const codexProvider = {
   command: {
-    arguments: ["exec", "-"],
+    arguments: [
+      "exec", "--profile", "agent-boot", "--strict-config",
+      "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+    ],
     executable: "codex",
     workingDirectory: { path: "workspace", scope: "user-home" },
   },
@@ -361,7 +364,9 @@ test("runner cancellation during provider execution stops provider and accepted 
         },
         processIdentityHost: identityHost,
         promptHydrator,
-        providerAdapter: new CodexProviderAdapter(),
+        providerAdapter: new CodexProviderAdapter({
+          ensureReady: async () => undefined,
+        }),
         providerPolicy: { timeoutMs: 120_000 },
       },
       host,
