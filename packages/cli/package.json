@@ -15,6 +15,10 @@
     "./images": {
       "types": "./dist/images/index.d.ts",
       "default": "./dist/images/index.js"
+    },
+    "./imaging": {
+      "types": "./dist/imaging/index.d.ts",
+      "default": "./dist/imaging/index.js"
     }
   },
   "files": ["dist", "README.md"],

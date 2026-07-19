@@ -39,6 +39,10 @@ interface PlanState {
   readonly target: BlockDevice;
 }
 
+export interface RecheckedImageTarget extends AuthorizedImageTarget {
+  readonly mountedDescendantMountpoints: readonly string[];
+}
+
 const planStates = new WeakMap<ImageTargetPlan, PlanState>();
 
 function fail(
@@ -89,7 +93,8 @@ const identity = (device: BlockDevice): string => createHash("sha256")
 const resolveTarget = (
   request: ImageTargetRequest,
   snapshot: DriveSnapshot,
-): BlockDevice => {
+  allowMountedDescendants = false,
+): { readonly mounted: readonly BlockDevice[]; readonly target: BlockDevice } => {
   const rootAncestors = activeRootAncestors(snapshot);
   if (rootAncestors === undefined) {
     fail("active-root-unresolved", "Active root ancestry could not be established.");
@@ -106,7 +111,7 @@ const resolveTarget = (
   if (mounted === undefined) {
     fail("descendant-mount-unresolved", "Mounted-device ancestry could not be established.");
   }
-  if (mounted.length > 0) {
+  if (!allowMountedDescendants && mounted.length > 0) {
     fail("descendant-mounted", "Target or one of its descendants is mounted.");
   }
   if (target.model !== request.constraints.expectedModel.trim()) {
@@ -122,7 +127,7 @@ const resolveTarget = (
   if (target.sizeBytes > request.constraints.maxSizeBytes) {
     fail("size-limit-exceeded", "Target exceeds the explicit maximum size.");
   }
-  return target;
+  return { mounted, target };
 };
 
 export const prepareImageTargetPlan = async (
@@ -130,7 +135,7 @@ export const prepareImageTargetPlan = async (
   inspector: DriveInspector,
 ): Promise<ImageTargetPlan> => {
   const validated = validateRequest(request);
-  const target = resolveTarget(validated, await inspector.inspect());
+  const { target } = resolveTarget(validated, await inspector.inspect());
   const targetIdentity = identity(target);
   const plan = Object.freeze({
     confirmationToken: targetIdentity.slice(0, 12),
@@ -156,11 +161,30 @@ export const recheckImageTarget = async (
   const state = planStates.get(plan);
   if (state === undefined) throw new TypeError("Image target plan was not created by preflight.");
   const request = { constraints: state.constraints, stableTarget: plan.stableTarget };
-  const current = resolveTarget(request, await inspector.inspect());
+  const { target: current } = resolveTarget(request, await inspector.inspect());
   if (identity(current) !== state.identity || current.canonicalPath !== state.target.canonicalPath) {
     fail("identity-changed", "Target identity changed after acknowledgement.");
   }
   return {
+    resolvedTarget: current.canonicalPath,
+    sizeBytes: current.sizeBytes,
+    stableTarget: plan.stableTarget,
+  };
+};
+
+export const recheckImageTargetForWrite = async (
+  plan: ImageTargetPlan,
+  inspector: DriveInspector,
+): Promise<RecheckedImageTarget> => {
+  const state = planStates.get(plan);
+  if (state === undefined) throw new TypeError("Image target plan was not created by preflight.");
+  const request = { constraints: state.constraints, stableTarget: plan.stableTarget };
+  const { mounted, target: current } = resolveTarget(request, await inspector.inspect(), true);
+  if (identity(current) !== state.identity || current.canonicalPath !== state.target.canonicalPath) {
+    fail("identity-changed", "Target identity changed after acknowledgement.");
+  }
+  return {
+    mountedDescendantMountpoints: [...new Set(mounted.flatMap(device => device.mountpoints))],
     resolvedTarget: current.canonicalPath,
     sizeBytes: current.sizeBytes,
     stableTarget: plan.stableTarget,

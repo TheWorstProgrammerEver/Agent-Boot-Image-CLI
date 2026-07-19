@@ -6,8 +6,19 @@ import { createLockOwnerIdentity, lockOwnerIsAlive } from "./lock-owner.js";
 
 type ReleaseLock = () => Promise<void>;
 
-const delay = (milliseconds: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, milliseconds));
+const delay = (milliseconds: number, cancellation?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    cancellation?.throwIfAborted();
+    const timeout = setTimeout(() => {
+      cancellation?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = (): void => {
+      clearTimeout(timeout);
+      reject(new Error("File lock acquisition was canceled.", { cause: cancellation?.reason }));
+    };
+    cancellation?.addEventListener("abort", abort, { once: true });
+  });
 
 const errorCode = (error: unknown): string | undefined =>
   (error as NodeJS.ErrnoException).code;
@@ -78,8 +89,14 @@ async function recoverStaleLock(
   observedIdentity: string,
   deadline: number,
   pollMs: number,
+  cancellation?: AbortSignal,
 ): Promise<boolean> {
-  const releaseRecovery = await acquireFileLockUntil(`${path}.recovery`, deadline, pollMs);
+  const releaseRecovery = await acquireFileLockUntil(
+    `${path}.recovery`,
+    deadline,
+    pollMs,
+    cancellation,
+  );
 
   try {
     const currentIdentity = await readIdentity(path);
@@ -101,8 +118,10 @@ async function acquireFileLockUntil(
   path: string,
   deadline: number,
   pollMs: number,
+  cancellation?: AbortSignal,
 ): Promise<ReleaseLock> {
   while (Date.now() <= deadline) {
+    cancellation?.throwIfAborted();
     const release = await tryAcquireOwnedLock(path);
     if (release !== undefined) return release;
 
@@ -110,9 +129,9 @@ async function acquireFileLockUntil(
     if (observedIdentity === undefined) continue;
     if (
       !await lockOwnerIsAlive(observedIdentity)
-      && await recoverStaleLock(path, observedIdentity, deadline, pollMs)
+      && await recoverStaleLock(path, observedIdentity, deadline, pollMs, cancellation)
     ) continue;
-    await delay(pollMs);
+    await delay(pollMs, cancellation);
   }
   throw new ArtifactAcquisitionError("lock-timeout");
 }
@@ -121,6 +140,7 @@ export const acquireFileLock = async (
   path: string,
   timeoutMs: number,
   pollMs: number,
+  cancellation?: AbortSignal,
 ): Promise<ReleaseLock> => {
-  return acquireFileLockUntil(path, Date.now() + timeoutMs, pollMs);
+  return acquireFileLockUntil(path, Date.now() + timeoutMs, pollMs, cancellation);
 };

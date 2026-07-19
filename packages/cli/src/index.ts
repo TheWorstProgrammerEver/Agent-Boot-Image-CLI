@@ -34,3 +34,4 @@ export {
   type ImageTargetRequest,
 } from "./drives/index.js";
 export * from "./images/index.js";
+export * from "./imaging/index.js";
