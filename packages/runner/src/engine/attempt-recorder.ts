@@ -76,6 +76,7 @@ export class RunnerAttemptRecorder {
     checkpoint: StepCheckpoint,
     failure: { readonly exitCode: number | null; readonly signal: NodeJS.Signals | null },
     code: RunnerDiagnostic["code"] = "step-attempt-failed",
+    retryRecovery: RunnerDiagnostic["recovery"] = "retry-step",
   ): Promise<{ readonly result?: RunnerExecutionResult; readonly state: RunnerCheckpoint }> {
     state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
     const finalAttempt = checkpoint.attempt >= this.maxAttemptsForStep(
@@ -84,7 +85,7 @@ export class RunnerAttemptRecorder {
     const diagnostic = attemptDiagnostic(
       checkpoint,
       failure,
-      finalAttempt ? "manual-intervention" : "retry-step",
+      finalAttempt ? "manual-intervention" : retryRecovery,
       code,
     );
     this.#emit({

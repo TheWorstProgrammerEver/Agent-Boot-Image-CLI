@@ -11,6 +11,7 @@ import {
 } from "../state/index.js";
 import { AutomaticStepExecutor } from "../steps/automatic/index.js";
 import { RunnerEnvironment } from "../steps/environment/index.js";
+import { InstallUserSecretExecutor } from "../steps/install-user-secret/index.js";
 import {
   ManualStepExecutor,
   type ManualStepProgress,
@@ -72,6 +73,7 @@ export class RunnerEngine {
   readonly #promptHydrator: PromptHydrator | undefined;
   readonly #provider: ProviderStepExecutor | undefined;
   readonly #stateStore: RunnerEngineOptions["stateStore"];
+  readonly #userSecrets: InstallUserSecretExecutor | undefined;
 
   constructor(options: RunnerEngineOptions) {
     validateAutomaticPolicy(options.automaticPolicy);
@@ -120,6 +122,13 @@ export class RunnerEngine {
             options.providerAdapter,
             options.providerPolicy,
           );
+    this.#userSecrets =
+      options.userSecretInstallation === undefined
+        ? undefined
+        : new InstallUserSecretExecutor({
+            ...options.userSecretInstallation,
+            accountHome: options.environment.homeDirectory,
+          });
     this.#stateStore = options.stateStore;
     this.#processLifecycle = new RunnerProcessLifecycle(
       options,
@@ -159,6 +168,7 @@ export class RunnerEngine {
       const unsupported = findUnsupportedStep(this.#plan.steps, {
         prompt: this.#promptHydrator !== undefined,
         provider: this.#provider !== undefined,
+        userSecret: this.#userSecrets !== undefined,
       });
       if (unsupported !== undefined) {
         return await this.#attempts.fail(state, {
@@ -318,6 +328,39 @@ export class RunnerEngine {
           });
           return await this.#attempts.fail(state, diagnostic);
         }
+        if (step.kind === "install-user-secret") {
+          if (this.#userSecrets === undefined) {
+            throw new Error("Invariant violation: user-secret executor failed preflight");
+          }
+          try {
+            await this.#userSecrets.execute(
+              step,
+              state.secretTransaction,
+              transaction =>
+                this.#stateStore.checkpointSecretTransaction(this.#identity, transaction),
+            );
+          } catch {
+            checkpoint = { ...checkpoint, phase: "failed" };
+            const failure = await this.#attempts.recordFailure(
+              state,
+              checkpoint,
+              { exitCode: null, signal: null },
+              "secret-transaction-failed",
+              "resume-secret-transaction",
+            );
+            state = failure.state;
+            if (failure.result !== undefined) return failure.result;
+            continue;
+          }
+          this.#emit({
+            deletionAssurance: "unlink-not-secure-erase",
+            index: checkpoint.index,
+            status: "secret-source-removed",
+            stepId: checkpoint.id,
+          });
+          state = await this.#attempts.succeedStep(checkpoint);
+          continue;
+        }
         if (step.kind === "provider") {
           const descriptor = this.#plan.providers.find(
             (provider) => provider.id === step.providerId,
@@ -378,10 +421,6 @@ export class RunnerEngine {
           if (failure.result !== undefined) return failure.result;
           continue;
         }
-        if (step.kind !== "fire-and-forget") {
-          throw new Error("Invariant violation: unsupported step passed preflight");
-        }
-
         const launch = await this.#processLifecycle.launch(state, step, pending.index);
         this.#throwIfCanceled();
         state = launch.state;

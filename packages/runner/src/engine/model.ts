@@ -2,12 +2,14 @@ import type { SpawnHost } from "@agent-boot/process";
 
 import type { PromptHydrator } from "../prompts/index.js";
 import type { ProviderDescriptorAdapter } from "../providers/adapter.js";
+import type { InstallUserSecretExecutorOptions } from "../steps/install-user-secret/index.js";
 
 import type {
   FireAndForgetProcessEvent,
   RunnerCheckpoint,
   RunnerDiagnostic,
   RunnerPlanIdentity,
+  SecretTransactionCheckpoint,
   StepCheckpoint,
 } from "../state/index.js";
 import type {
@@ -19,6 +21,10 @@ export interface RunnerCheckpointStore {
   checkpointFireAndForgetProcess(
     plan: RunnerPlanIdentity,
     event: FireAndForgetProcessEvent,
+  ): Promise<RunnerCheckpoint>;
+  checkpointSecretTransaction(
+    plan: RunnerPlanIdentity,
+    checkpoint: SecretTransactionCheckpoint,
   ): Promise<RunnerCheckpoint>;
   checkpointStep(
     plan: RunnerPlanIdentity,
@@ -95,6 +101,12 @@ export type RunnerProgress =
       readonly status: "manual-terminal-failure";
       readonly stepId: string;
     }
+  | {
+      readonly deletionAssurance: "unlink-not-secure-erase";
+      readonly index: number;
+      readonly status: "secret-source-removed";
+      readonly stepId: string;
+    }
   | { readonly status: "runner-succeeded" }
   | {
       readonly diagnostic: RunnerDiagnostic;
@@ -117,6 +129,10 @@ export interface RunnerEngineOptions {
   readonly processIdentityHost?: ProcessIdentityHost;
   readonly serializedPlan: string | Uint8Array;
   readonly stateStore: RunnerCheckpointStore;
+  readonly userSecretInstallation?: Omit<
+    InstallUserSecretExecutorOptions,
+    "accountHome" | "onRemovalDiagnostic"
+  >;
 }
 
 export interface RunnerExecutionResult {
