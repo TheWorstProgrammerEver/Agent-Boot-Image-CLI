@@ -27,3 +27,28 @@ Exit codes are stable for automation:
 | 3 | Definition protocol is incompatible with this CLI. |
 | 4 | The module or reference metadata could not be loaded operationally. |
 | 64 | Command usage is invalid. |
+
+# `create-agent synth`
+
+Synthesize a validated definition with OS and private-runner inputs resolved by
+their owning components:
+
+```console
+create-agent synth \
+  --definition ./my-agent.ts \
+  --output ./assembly \
+  --os-lock ./resolved-os-lock.json \
+  --runner-runtime ./runner/node \
+  --runner-entrypoint ./runner/entrypoint.mjs
+```
+
+The command copies regular, non-symlink assets, prompts, and scripts only when
+they remain beneath the definition directory. Secret references are retained as
+opaque `secretId` values; their files are inspected at the metadata boundary but
+never opened or copied. Existing output is refused unless `--replace` is passed.
+Use `--plan` to print the redacted counts and deterministic assembly identifier
+without writing output.
+
+Additional synthesis exit codes are `5` for rejected synthesis input, `6` for
+existing output without `--replace`, and `7` for an operational or atomic-output
+failure.

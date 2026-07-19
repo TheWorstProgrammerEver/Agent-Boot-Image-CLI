@@ -1,0 +1,78 @@
+{
+  "agent": {
+    "displayName": "My Agent",
+    "id": "my-agent"
+  },
+  "assemblyId": "assembly-d9ce9403d8bee49a41f1dc3dd3fe8c32",
+  "assets": [
+    {
+      "byteLength": 15,
+      "id": "runner-runtime",
+      "path": "assets/runner/runtime",
+      "placement": {
+        "path": "opt/agent-boot/runtime/node",
+        "scope": "system"
+      },
+      "sha256": "6064ba1f455f1f43faebd5ddeb0e80f87e456f109697d040653bb35c7726ebb1"
+    },
+    {
+      "byteLength": 11,
+      "id": "runner-entrypoint",
+      "path": "assets/runner/entrypoint.mjs",
+      "placement": {
+        "path": "opt/agent-boot/runner.mjs",
+        "scope": "system"
+      },
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "byteLength": 17,
+      "id": "agent-config",
+      "path": "assets/resources/agent-config",
+      "placement": {
+        "path": ".config/agent/config.json",
+        "scope": "user-home"
+      },
+      "sha256": "a050ef06ea542b8fd8781f1e945f9adcd03c7ae5190719e66ba826e2059fce12"
+    },
+    {
+      "byteLength": 17,
+      "id": "script-prepare",
+      "path": "assets/scripts/prepare",
+      "placement": {
+        "path": "opt/agent-boot/scripts/prepare",
+        "scope": "system"
+      },
+      "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb"
+    }
+  ],
+  "bootstrap": {
+    "account": {
+      "initialPassword": {
+        "secretId": "credential"
+      },
+      "username": "my-user"
+    },
+    "runnerInstallation": {
+      "entrypointAssetId": "runner-entrypoint",
+      "runtimeAssetId": "runner-runtime"
+    }
+  },
+  "files": {
+    "assetsDirectory": "assets",
+    "osLock": "os-lock.json",
+    "promptsDirectory": "prompts",
+    "runnerPlan": "runner-plan.json"
+  },
+  "prompts": [
+    {
+      "id": "bootstrap",
+      "path": "prompts/bootstrap",
+      "sha256": "3adbc8f7c2782f59eac85e42371aa858525b4ea527e19222433d3f96d38b4ee8",
+      "variables": [
+        "agent-name"
+      ]
+    }
+  ],
+  "schemaVersion": 1
+}
