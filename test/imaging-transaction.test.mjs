@@ -90,6 +90,7 @@ const confirmedPlan = async () => confirmImageTargetPlan(
 const fakeTransaction = ({
   cancellation,
   inspect,
+  onRelease,
   onUnmount,
   onVerify,
   onWrite,
@@ -112,6 +113,7 @@ const fakeTransaction = ({
         return {
           release: async () => {
             events.push("release");
+            await onRelease?.();
             locked = false;
           },
         };
@@ -227,6 +229,25 @@ test("read-back mismatch is terminal and verification cannot be disabled", async
   });
 
   await assertImagingError(transaction.run(plan), "read-back-mismatch");
+  assert.deepEqual(transaction.events, ["lock", "write", "verify", "release"]);
+});
+
+test("operation and cleanup failures are both preserved", async () => {
+  const plan = await confirmedPlan();
+  const operationFailure = new ImageWriteError("read-back-mismatch", "fixture mismatch");
+  const releaseFailure = new Error("fixture release failure");
+  const transaction = fakeTransaction({
+    onRelease: async () => { throw releaseFailure; },
+    onVerify: async () => { throw operationFailure; },
+  });
+
+  await assert.rejects(transaction.run(plan), error => {
+    assert.ok(error instanceof ImageWriteError);
+    assert.equal(error.code, "cleanup-failed");
+    assert.ok(error.cause instanceof AggregateError);
+    assert.deepEqual(error.cause.errors, [operationFailure, releaseFailure]);
+    return true;
+  });
   assert.deepEqual(transaction.events, ["lock", "write", "verify", "release"]);
 });
 

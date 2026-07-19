@@ -78,10 +78,13 @@ const targetFromPlan = (request: ImageWriteTransactionRequest): AuthorizedImageT
   stableTarget: request.plan.stableTarget,
 });
 
-const cleanupFailure = (errors: readonly unknown[]): ImageWriteError => new ImageWriteError(
+const cleanupFailure = (
+  operationError: Error | undefined,
+  errors: readonly unknown[],
+): ImageWriteError => new ImageWriteError(
   "cleanup-failed",
   "Image write transaction cleanup did not complete.",
-  { cause: new AggregateError(errors) },
+  { cause: new AggregateError(operationError === undefined ? errors : [operationError, ...errors]) },
 );
 
 export const writeImageTransaction = async (
@@ -179,7 +182,7 @@ export const writeImageTransaction = async (
     for (const [signal, listener] of signalListeners) signalSource.off(signal, listener);
   }
 
-  if (cleanupErrors.length > 0) throw cleanupFailure(cleanupErrors);
+  if (cleanupErrors.length > 0) throw cleanupFailure(operationError, cleanupErrors);
   if (operationError !== undefined) throw operationError;
   if (result === undefined) throw new ImageWriteError("cleanup-failed", "Transaction produced no result.");
   return result;
