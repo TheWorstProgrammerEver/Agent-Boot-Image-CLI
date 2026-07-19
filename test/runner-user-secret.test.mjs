@@ -294,6 +294,72 @@ test("rejects symlink, hardlink, and special bootstrap sources", async t => {
   });
 });
 
+class SwapBootstrapDirectoryBeforeUnlinkFileSystem extends NodeUserSecretFileSystem {
+  bootstrap;
+  displacedBootstrap;
+  outside;
+  source;
+  sourceStatusChecks = 0;
+  swapped = false;
+
+  configure({ bootstrap, displacedBootstrap, outside, source }) {
+    this.bootstrap = bootstrap;
+    this.displacedBootstrap = displacedBootstrap;
+    this.outside = outside;
+    this.source = source;
+  }
+
+  async lstat(path) {
+    const status = await super.lstat(path);
+    if (path === this.source) await this.maybeSwap();
+    return status;
+  }
+
+  async lstatAt(directory, name) {
+    const status = await super.lstatAt(directory, name);
+    if (name === "service-credential") await this.maybeSwap();
+    return status;
+  }
+
+  async maybeSwap() {
+    this.sourceStatusChecks += 1;
+    if (this.sourceStatusChecks !== 4) return;
+    await rename(this.bootstrap, this.displacedBootstrap);
+    await symlink(this.outside, this.bootstrap);
+    this.swapped = true;
+  }
+}
+
+test("a bootstrap-directory swap cannot redirect source deletion", async () => {
+  const fileSystem = new SwapBootstrapDirectoryBeforeUnlinkFileSystem();
+  const fixture = await createUserSecretFixture({
+    userSecretInstallation: { fileSystem },
+  });
+  const displacedBootstrap = join(fixture.root, "bootstrap-displaced");
+  const outside = join(fixture.root, "bootstrap-outside");
+  const outsideSource = join(outside, "service-credential");
+  try {
+    await mkdir(outside);
+    await writeFile(outsideSource, "outside source must survive\n", { mode: 0o600 });
+    fileSystem.configure({
+      bootstrap: fixture.bootstrap,
+      displacedBootstrap,
+      outside,
+      source: fixture.source,
+    });
+
+    const result = await fixture.engine.run();
+
+    assert.equal(fileSystem.swapped, true);
+    assert.equal(result.status, "succeeded");
+    assert.equal(await readFile(outsideSource, "utf8"), "outside source must survive\n");
+    await absent(join(displacedBootstrap, "service-credential"));
+    assert.deepEqual(await readFile(fixture.destination), secretContents);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("rejects a destination symlink without writing outside the account home", async () => {
   const fixture = await createUserSecretFixture();
   const outside = join(fixture.root, "outside");

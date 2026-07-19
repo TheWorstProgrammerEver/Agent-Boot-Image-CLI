@@ -11,13 +11,17 @@ import {
   type UserSecretFileSystem,
   type UserSecretOwnership,
 } from "./filesystem.js";
+import { closeQuietly } from "./io.js";
 import type {
   SecretTransactionWriter,
   UserSecretInstallLifecycle,
   UserSecretInstallStage,
   UserSecretRemovalDiagnostic,
 } from "./model.js";
-import { BootstrapSecretStore } from "./source-store.js";
+import {
+  BootstrapSecretStore,
+  type BootstrapSecretLocation,
+} from "./source-store.js";
 
 export interface InstallUserSecretExecutorOptions {
   readonly accountGid: number;
@@ -72,45 +76,51 @@ export class InstallUserSecretExecutor {
     recovered: SecretTransactionCheckpoint | null,
     checkpoint: SecretTransactionWriter,
   ): Promise<void> {
-    const sourcePath = await this.#source.pathFor(step.secretId);
-    const destination = await this.#destination.pathFor(step.destination);
-    let transaction = this.#recover(step, recovered);
-    if (transaction === null) {
-      await this.#source.read(sourcePath);
-      transaction = this.#transaction(step, "prepared");
-      await this.#checkpoint(transaction, checkpoint);
-    }
-    if (transaction.phase === "prepared") {
-      this.#notify("before-install");
-      const source = await this.#source.read(sourcePath);
-      await this.#destination.install(destination, source.contents);
-      await this.#destination.verify(destination, source.contents);
-      this.#notify("after-install");
-      transaction = this.#transaction(step, "installed");
-      await this.#checkpoint(transaction, checkpoint);
-    }
-    if (transaction.phase === "installed") {
-      this.#notify("before-source-remove");
-      const source = await this.#source.readIfPresent(sourcePath);
-      await this.#destination.verify(destination, source?.contents);
-      if (source !== undefined) await this.#source.remove(sourcePath, source.status);
-      this.#notify("after-source-remove");
-      this.#onRemovalDiagnostic?.({
-        deletionAssurance: "unlink-not-secure-erase",
-        status: "source-removed",
-      });
-      transaction = this.#transaction(step, "source-removed");
-      await this.#checkpoint(transaction, checkpoint);
-    }
-    if (transaction.phase === "source-removed") {
-      await this.#requireSourceAbsent(sourcePath);
-      await this.#destination.verify(destination);
-      transaction = this.#transaction(step, "committed");
-      await this.#checkpoint(transaction, checkpoint);
-    }
-    if (transaction.phase === "committed") {
-      await this.#requireSourceAbsent(sourcePath);
-      await this.#destination.verify(destination);
+    const source = await this.#source.open(step.secretId);
+    try {
+      const destination = await this.#destination.pathFor(step.destination);
+      let transaction = this.#recover(step, recovered);
+      if (transaction === null) {
+        await this.#source.read(source);
+        transaction = this.#transaction(step, "prepared");
+        await this.#checkpoint(transaction, checkpoint);
+      }
+      if (transaction.phase === "prepared") {
+        this.#notify("before-install");
+        const bootstrapSecret = await this.#source.read(source);
+        await this.#destination.install(destination, bootstrapSecret.contents);
+        await this.#destination.verify(destination, bootstrapSecret.contents);
+        this.#notify("after-install");
+        transaction = this.#transaction(step, "installed");
+        await this.#checkpoint(transaction, checkpoint);
+      }
+      if (transaction.phase === "installed") {
+        this.#notify("before-source-remove");
+        const bootstrapSecret = await this.#source.readIfPresent(source);
+        await this.#destination.verify(destination, bootstrapSecret?.contents);
+        if (bootstrapSecret !== undefined) {
+          await this.#source.remove(source, bootstrapSecret.status);
+        }
+        this.#notify("after-source-remove");
+        this.#onRemovalDiagnostic?.({
+          deletionAssurance: "unlink-not-secure-erase",
+          status: "source-removed",
+        });
+        transaction = this.#transaction(step, "source-removed");
+        await this.#checkpoint(transaction, checkpoint);
+      }
+      if (transaction.phase === "source-removed") {
+        await this.#requireSourceAbsent(source);
+        await this.#destination.verify(destination);
+        transaction = this.#transaction(step, "committed");
+        await this.#checkpoint(transaction, checkpoint);
+      }
+      if (transaction.phase === "committed") {
+        await this.#requireSourceAbsent(source);
+        await this.#destination.verify(destination);
+      }
+    } finally {
+      await closeQuietly(source.directory);
     }
   }
 
@@ -138,8 +148,8 @@ export class InstallUserSecretExecutor {
     return recovered;
   }
 
-  async #requireSourceAbsent(path: string): Promise<void> {
-    if (await this.#source.exists(path)) {
+  async #requireSourceAbsent(source: BootstrapSecretLocation): Promise<void> {
+    if (await this.#source.exists(source)) {
       throw new UserSecretInstallError("verification-failed");
     }
   }
