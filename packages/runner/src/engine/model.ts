@@ -31,6 +31,15 @@ export interface AutomaticStepPolicy {
   readonly timeoutMs: number;
 }
 
+export interface ManualStepPolicy {
+  readonly completionCheckTimeoutMs: number;
+  readonly maximumPollIntervalMs: number;
+}
+
+export interface ManualStepScheduler {
+  sleep(delayMs: number, cancellation: AbortSignal): Promise<void>;
+}
+
 export type RunnerProgress =
   | {
       readonly attempt: number;
@@ -45,6 +54,31 @@ export type RunnerProgress =
       readonly status: "step-failed";
       readonly stepId: string;
     }
+  | {
+      readonly check: number;
+      readonly index: number;
+      readonly status: "manual-completed";
+      readonly stepId: string;
+    }
+  | {
+      readonly check: number;
+      readonly delayMs: number;
+      readonly index: number;
+      readonly status: "manual-check-retry";
+      readonly stepId: string;
+    }
+  | {
+      readonly index: number;
+      readonly resumed: boolean;
+      readonly status: "manual-waiting";
+      readonly stepId: string;
+    }
+  | {
+      readonly diagnostic: RunnerDiagnostic;
+      readonly index: number;
+      readonly status: "manual-terminal-failure";
+      readonly stepId: string;
+    }
   | { readonly status: "runner-succeeded" }
   | {
       readonly diagnostic: RunnerDiagnostic;
@@ -55,6 +89,8 @@ export interface RunnerEngineOptions {
   readonly automaticPolicy: AutomaticStepPolicy;
   readonly commandHost: SpawnHost;
   readonly environment: RunnerEnvironmentOptions;
+  readonly manualPolicy: ManualStepPolicy;
+  readonly manualScheduler?: ManualStepScheduler;
   readonly onProgress?: (progress: RunnerProgress) => void;
   readonly serializedPlan: string | Uint8Array;
   readonly stateStore: RunnerCheckpointStore;

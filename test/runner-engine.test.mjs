@@ -190,14 +190,13 @@ test("command exceptions are reduced to redacted structured diagnostics", async 
 });
 
 test("known unsupported and unknown steps fail before command execution", async () => {
-  const manual = {
+  const unsupported = {
     command: { arguments: [], executable: "manual-tool" },
-    completionCheck: { arguments: [], executable: "check-tool" },
-    id: "manual-step",
-    kind: "manual",
-    pollIntervalSeconds: 1,
+    id: "background-step",
+    kind: "fire-and-forget",
+    lifetime: "runner",
   };
-  const fixture = await createEngineFixture([automaticStep("would-run"), manual]);
+  const fixture = await createEngineFixture([automaticStep("would-run"), unsupported]);
   try {
     const result = await fixture.engine.run();
 
@@ -207,7 +206,7 @@ test("known unsupported and unknown steps fail before command execution", async 
     assert.deepEqual(result.state.terminal.diagnostic, {
       code: "manual-intervention-required",
       recovery: "manual-intervention",
-      stepId: "manual-step",
+      stepId: "background-step",
     });
   } finally {
     await fixture.cleanup();
@@ -231,6 +230,10 @@ test("known unsupported and unknown steps fail before command execution", async 
           basePath: "/usr/bin",
           homeDirectory: "/home/my-user",
           workingDirectory: "/home/my-user",
+        },
+        manualPolicy: {
+          completionCheckTimeoutMs: 1_000,
+          maximumPollIntervalMs: 1_000,
         },
         serializedPlan: JSON.stringify(invalid),
         stateStore: invalidStore,

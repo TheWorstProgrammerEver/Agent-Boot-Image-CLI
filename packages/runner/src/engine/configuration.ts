@@ -1,10 +1,12 @@
 import { runnerPlanSchema, type RunnerPlan } from "@agent-boot/protocol";
 
 import { RunnerConfigurationError, RunnerPlanError } from "./errors.js";
-import type { AutomaticStepPolicy } from "./model.js";
+import type { AutomaticStepPolicy, ManualStepPolicy } from "./model.js";
 
 const MAX_AUTOMATIC_ATTEMPTS = 100;
 const MAX_AUTOMATIC_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
+const MAX_MANUAL_POLL_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+const MAX_MANUAL_CHECK_TIMEOUT_MS = 60 * 60 * 1_000;
 
 const validatePositiveInteger = (field: string, value: number, maximum: number): void => {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
@@ -25,6 +27,19 @@ export const validateAutomaticPolicy = (policy: AutomaticStepPolicy): void => {
     "automaticPolicy.timeoutMs",
     policy.timeoutMs,
     MAX_AUTOMATIC_TIMEOUT_MS,
+  );
+};
+
+export const validateManualPolicy = (policy: ManualStepPolicy): void => {
+  validatePositiveInteger(
+    "manualPolicy.completionCheckTimeoutMs",
+    policy.completionCheckTimeoutMs,
+    MAX_MANUAL_CHECK_TIMEOUT_MS,
+  );
+  validatePositiveInteger(
+    "manualPolicy.maximumPollIntervalMs",
+    policy.maximumPollIntervalMs,
+    MAX_MANUAL_POLL_INTERVAL_MS,
   );
 };
 

@@ -52,6 +52,10 @@ export const createEngineFixture = async (steps, options = {}) => {
       homeDirectory: "/home/my-user",
       workingDirectory: "/home/my-user/workspace",
     },
+    manualPolicy: {
+      completionCheckTimeoutMs: 5_000,
+      maximumPollIntervalMs: 8_000,
+    },
     serializedPlan,
     stateStore: store,
     ...options.engineOptions,
