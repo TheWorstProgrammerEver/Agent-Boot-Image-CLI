@@ -244,6 +244,37 @@ test("every preflight rejection leaves destructive adapters untouched", async ()
   }
 });
 
+test("unresolved active-root ancestry fails closed before destructive adapters", async () => {
+  const cases = [
+    snapshot({
+      devices: devices.map((device) => device.kernelName === "dm-0"
+        ? { ...device, parentKernelName: "missing-root-parent" }
+        : device),
+    }),
+    snapshot({
+      devices: devices.map((device) => device.kernelName === "nvme0n1p2"
+        ? { ...device, parentKernelName: "dm-0" }
+        : device),
+    }),
+  ];
+
+  for (const targetSnapshot of cases) {
+    assert.ok(listDriveCandidates(targetSnapshot).every(({ safetyWarnings }) =>
+      safetyWarnings.includes("active root ancestry unresolved")));
+    const destructive = destructiveFake();
+    await assertGuardrail(
+      runGuardedImageTarget(
+        request(),
+        scriptedInspector(targetSnapshot),
+        { acknowledgement: { yes: true }, writeLine: () => undefined },
+        destructive.begin,
+      ),
+      "active-root-unresolved",
+    );
+    assert.deepEqual(destructive.calls, { customize: 0, lock: 0, unmount: 0, write: 0 });
+  }
+});
+
 test("confirmation prints the plan first and requires the exact acknowledgement", async () => {
   const plan = await prepareImageTargetPlan(request(), scriptedInspector(snapshot()));
   const events = [];

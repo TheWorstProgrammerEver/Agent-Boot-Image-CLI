@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { BlockDevice, DriveInspector, DriveSnapshot } from "@agent-boot/os-linux";
 
 import { DriveGuardrailError } from "./errors.js";
-import { deviceMaps, isActiveRootAncestor, mountedDescendants } from "./topology.js";
+import { activeRootAncestors, deviceMaps, mountedDescendants } from "./topology.js";
 
 const STABLE_TARGET_PREFIX = "/dev/disk/by-id/";
 
@@ -90,7 +90,8 @@ const resolveTarget = (
   request: ImageTargetRequest,
   snapshot: DriveSnapshot,
 ): BlockDevice => {
-  if (!snapshot.devices.some((device) => device.mountpoints.includes("/"))) {
+  const rootAncestors = activeRootAncestors(snapshot);
+  if (rootAncestors === undefined) {
     fail("active-root-unresolved", "Active root ancestry could not be established.");
   }
   const link = snapshot.stableLinks.find(({ path }) => path === request.stableTarget);
@@ -98,7 +99,7 @@ const resolveTarget = (
   const target = deviceMaps(snapshot).byPath.get(link.resolvedPath);
   if (target === undefined) fail("target-not-found", "Resolved target is not in block-device topology.");
   if (target.type !== "disk") fail("not-whole-disk", "Resolved target is not a whole disk.");
-  if (isActiveRootAncestor(target, snapshot)) {
+  if (rootAncestors.has(target.kernelName)) {
     fail("active-system-disk", "Target contains the active root filesystem.");
   }
   if (mountedDescendants(target, snapshot).length > 0) {

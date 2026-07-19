@@ -1,6 +1,6 @@
 import type { BlockDevice, DriveSnapshot } from "@agent-boot/os-linux";
 
-import { isActiveRootAncestor, mountedDescendants } from "./topology.js";
+import { activeRootAncestors, mountedDescendants } from "./topology.js";
 
 export interface DriveCandidate {
   readonly canonicalPath: string;
@@ -19,13 +19,16 @@ const linksFor = (device: BlockDevice, snapshot: DriveSnapshot): string[] =>
     .map((link) => link.path)
     .sort((left, right) => left.localeCompare(right));
 
-export const listDriveCandidates = (snapshot: DriveSnapshot): DriveCandidate[] =>
-  snapshot.devices
+export const listDriveCandidates = (snapshot: DriveSnapshot): DriveCandidate[] => {
+  const rootAncestors = activeRootAncestors(snapshot);
+  return snapshot.devices
     .filter((device) => device.type === "disk")
     .map((device): DriveCandidate => {
       const stableTargets = linksFor(device, snapshot);
       const safetyWarnings = [
-        ...(isActiveRootAncestor(device, snapshot) ? ["active system disk"] : []),
+        ...(rootAncestors === undefined
+          ? ["active root ancestry unresolved"]
+          : rootAncestors.has(device.kernelName) ? ["active system disk"] : []),
         ...(mountedDescendants(device, snapshot).length > 0 ? ["mounted descendants"] : []),
         ...(!device.removable ? ["not removable"] : []),
         ...(stableTargets.length === 0 ? ["no stable by-id target"] : []),
@@ -42,6 +45,7 @@ export const listDriveCandidates = (snapshot: DriveSnapshot): DriveCandidate[] =
       };
     })
     .sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
+};
 
 const formatBytes = (bytes: number): string => {
   const gibibytes = bytes / (1024 ** 3);

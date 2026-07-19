@@ -11,26 +11,31 @@ export const deviceMaps = (snapshot: DriveSnapshot): {
 const ancestorsOf = (
   device: BlockDevice,
   byKernelName: ReadonlyMap<string, BlockDevice>,
-): Set<string> => {
+): Set<string> | undefined => {
   const ancestors = new Set<string>();
-  let current: BlockDevice | undefined = device;
-  while (current !== undefined && !ancestors.has(current.kernelName)) {
+  let current = device;
+  while (!ancestors.has(current.kernelName)) {
     ancestors.add(current.kernelName);
-    current = current.parentKernelName === undefined
-      ? undefined
-      : byKernelName.get(current.parentKernelName);
+    if (current.parentKernelName === undefined) return ancestors;
+    const parent = byKernelName.get(current.parentKernelName);
+    if (parent === undefined) return undefined;
+    current = parent;
   }
-  return ancestors;
+  return undefined;
 };
 
-export const isActiveRootAncestor = (
-  target: BlockDevice,
-  snapshot: DriveSnapshot,
-): boolean => {
+export const activeRootAncestors = (snapshot: DriveSnapshot): ReadonlySet<string> | undefined => {
   const { byKernelName } = deviceMaps(snapshot);
-  return snapshot.devices
-    .filter((device) => device.mountpoints.includes("/"))
-    .some((root) => ancestorsOf(root, byKernelName).has(target.kernelName));
+  const roots = snapshot.devices.filter((device) => device.mountpoints.includes("/"));
+  if (roots.length === 0) return undefined;
+
+  const ancestors = new Set<string>();
+  for (const root of roots) {
+    const rootAncestors = ancestorsOf(root, byKernelName);
+    if (rootAncestors === undefined) return undefined;
+    rootAncestors.forEach((kernelName) => ancestors.add(kernelName));
+  }
+  return ancestors;
 };
 
 export const mountedDescendants = (
@@ -39,5 +44,6 @@ export const mountedDescendants = (
 ): readonly BlockDevice[] => {
   const { byKernelName } = deviceMaps(snapshot);
   return snapshot.devices.filter((device) =>
-    device.mountpoints.length > 0 && ancestorsOf(device, byKernelName).has(target.kernelName));
+    device.mountpoints.length > 0 &&
+    ancestorsOf(device, byKernelName)?.has(target.kernelName) === true);
 };
