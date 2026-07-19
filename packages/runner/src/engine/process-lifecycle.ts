@@ -14,6 +14,7 @@ import {
 import type { RunnerEngineOptions } from "./model.js";
 
 export class RunnerProcessLifecycle {
+  readonly #cancellation: AbortSignal | undefined;
   readonly #environment: RunnerEnvironment;
   readonly #plan: RunnerPlan;
   readonly #supervisor: FireAndForgetSupervisor;
@@ -24,6 +25,7 @@ export class RunnerProcessLifecycle {
     identity: RunnerPlanIdentity,
     environment: RunnerEnvironment,
   ) {
+    this.#cancellation = options.cancellation;
     this.#environment = environment;
     this.#plan = plan;
     this.#supervisor = new FireAndForgetSupervisor({
@@ -54,6 +56,7 @@ export class RunnerProcessLifecycle {
       stepIndex,
       this.#environment.forStep(this.#plan.steps, stepIndex),
       this.#environment,
+      this.#cancellation,
     );
   }
 
@@ -77,7 +80,7 @@ export class RunnerProcessLifecycle {
 
       if (process.phase !== "finished") {
         const sameBoot = await this.#supervisor.isCurrentBoot(process);
-        const resumed = await this.#supervisor.resume(state, process);
+        const resumed = await this.#supervisor.resume(state, process, this.#cancellation);
         state = resumed.state;
         if (resumed.status === "accepted") continue;
         if (sameBoot) {
@@ -123,7 +126,7 @@ export class RunnerProcessLifecycle {
         ? this.launch(state, step, process.stepIndex)
         : this.#failedProcess(state, process);
     }
-    const resumed = await this.#supervisor.resume(state, process);
+    const resumed = await this.#supervisor.resume(state, process, this.#cancellation);
     if (resumed.status !== "missing") return resumed;
     return this.#failedProcess(resumed.state, process);
   }

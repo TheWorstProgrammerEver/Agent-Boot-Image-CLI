@@ -32,6 +32,9 @@ const failedResult: SpawnResult = {
   signal: null,
 };
 
+const acceptanceInterrupted = (): Error =>
+  new Error("Runner cancellation interrupted fire-and-forget acceptance");
+
 const exitDiagnostic = (
   process: FireAndForgetProcessCheckpoint,
   result: SpawnResult,
@@ -51,7 +54,7 @@ export class FireAndForgetSupervisor {
   readonly #plan: FireAndForgetSupervisorOptions["plan"];
   readonly #policy: FireAndForgetSupervisorOptions["policy"];
   readonly #stateStore: FireAndForgetSupervisorOptions["stateStore"];
-  readonly #wait: (milliseconds: number) => Promise<void>;
+  readonly #wait: (milliseconds: number, cancellation: AbortSignal) => Promise<void>;
 
   constructor(options: FireAndForgetSupervisorOptions) {
     this.#commandHost = options.commandHost;
@@ -59,7 +62,8 @@ export class FireAndForgetSupervisor {
     this.#plan = options.plan;
     this.#policy = options.policy;
     this.#stateStore = options.stateStore;
-    this.#wait = options.wait ?? (milliseconds => wait(milliseconds));
+    this.#wait = options.wait ?? ((milliseconds, cancellation) =>
+      wait(milliseconds, undefined, { signal: cancellation }));
   }
 
   isTracking(stepId: string): boolean {
@@ -76,6 +80,7 @@ export class FireAndForgetSupervisor {
     stepIndex: number,
     environment: ChildEnvironment,
     runnerEnvironment: RunnerEnvironment,
+    cancellation?: AbortSignal,
   ): Promise<FireAndForgetLaunchResult> {
     const prior = state.fireAndForgetProcesses.find((process) => process.stepId === step.id);
     const generation = (prior?.generation ?? 0) + 1;
@@ -158,7 +163,7 @@ export class FireAndForgetSupervisor {
     });
     this.#instances.set(step.id, tracked);
 
-    const accepted = await this.#survivesAcceptanceWindow(tracked);
+    const accepted = await this.#survivesAcceptanceWindow(tracked, cancellation);
     if (!accepted) {
       const result = tracked.result?.result ?? failedResult;
       state = await this.#finish(state, tracked, "exited-before-acceptance", result);
@@ -188,6 +193,7 @@ export class FireAndForgetSupervisor {
   async resume(
     state: RunnerCheckpoint,
     process: FireAndForgetProcessCheckpoint,
+    cancellation?: AbortSignal,
   ): Promise<FireAndForgetLaunchResult | { readonly state: RunnerCheckpoint; readonly status: "missing" }> {
     if (!(await this.#identityHost.matches(process.identity))) {
       state = await this.#finish(state, { checkpoint: process }, "reconciled-missing", failedResult);
@@ -198,7 +204,7 @@ export class FireAndForgetSupervisor {
     if (process.phase === "accepted") return { state, status: "accepted" };
     if (process.phase !== "registered") return { state, status: "missing" };
 
-    if (!(await this.#survivesAcceptanceWindow(tracked))) {
+    if (!(await this.#survivesAcceptanceWindow(tracked, cancellation))) {
       state = await this.#finish(state, tracked, "exited-before-acceptance", failedResult);
       this.#instances.delete(process.stepId);
       return {
@@ -309,8 +315,32 @@ export class FireAndForgetSupervisor {
     return process;
   }
 
-  async #survivesAcceptanceWindow(tracked: TrackedProcess): Promise<boolean> {
-    await this.#wait(this.#policy.acceptanceWindowMs);
+  async #survivesAcceptanceWindow(
+    tracked: TrackedProcess,
+    cancellation?: AbortSignal,
+  ): Promise<boolean> {
+    const waitCancellation = new AbortController();
+    let interrupt: (() => void) | undefined;
+    const interrupted = cancellation === undefined
+      ? undefined
+      : new Promise<never>((_resolve, reject) => {
+        interrupt = (): void => {
+          reject(acceptanceInterrupted());
+        };
+        if (cancellation.aborted) interrupt();
+        else cancellation.addEventListener("abort", interrupt, { once: true });
+      });
+    try {
+      await Promise.race([
+        this.#wait(this.#policy.acceptanceWindowMs, waitCancellation.signal),
+        ...(interrupted === undefined ? [] : [interrupted]),
+      ]);
+    } finally {
+      waitCancellation.abort();
+      if (interrupt !== undefined) {
+        cancellation?.removeEventListener("abort", interrupt);
+      }
+    }
     if (tracked.result !== undefined) return false;
     return this.#identityHost.matches(tracked.checkpoint.identity);
   }

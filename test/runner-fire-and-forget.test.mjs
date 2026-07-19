@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { execPath } from "node:process";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { NodeSpawnAdapter } from "@agent-boot/process";
 import {
@@ -186,23 +187,52 @@ test("a process exit after acceptance fails the active runner without relabeling
   }
 });
 
-test("runner cancellation forwards an allowed signal and leaves resumable state", async () => {
+test("runner cancellation interrupts acceptance, forwards its signal, and leaves resumable state", async () => {
   const controller = new globalThis.AbortController();
   const identityHost = createIdentityHost();
   const host = new ScriptedSpawnHost(identityHost).scriptRunning(501);
+  let markAcceptanceStarted;
+  const acceptanceStarted = new Promise(resolve => {
+    markAcceptanceStarted = resolve;
+  });
+  let releaseAcceptance;
+  const blockedAcceptance = new Promise(resolve => {
+    releaseAcceptance = resolve;
+  });
   const fixture = await createEngineFixture([fireAndForgetStep()], {
     engineOptions: {
       cancellation: controller.signal,
       fireAndForgetPolicy: policy,
       lifecycleWait: async () => {
-        controller.abort("SIGINT");
+        markAcceptanceStarted();
+        await blockedAcceptance;
       },
       processIdentityHost: identityHost,
     },
     host,
   });
+  let running;
   try {
-    await assert.rejects(fixture.engine.run(), RunnerInterruptedError);
+    running = fixture.engine.run();
+    await acceptanceStarted;
+    controller.abort("SIGINT");
+    const promptTimeout = new globalThis.AbortController();
+    let settled;
+    try {
+      settled = await Promise.race([
+        running.then(
+          () => ({ status: "resolved" }),
+          error => ({ error, status: "rejected" }),
+        ),
+        delay(100, undefined, { signal: promptTimeout.signal }).then(
+          () => ({ status: "timeout" }),
+        ),
+      ]);
+    } finally {
+      promptTimeout.abort();
+    }
+    assert.equal(settled.status, "rejected");
+    assert.ok(settled.error instanceof RunnerInterruptedError);
     const identity = identifyRunnerPlan(
       { agentId: "test-agent", schemaVersion: 1 },
       fixture.serializedPlan,
@@ -213,11 +243,14 @@ test("runner cancellation forwards an allowed signal and leaves resumable state"
     assert.equal(inspection.state.fireAndForgetProcesses[0].outcome, "runner-shutdown");
     assert.deepEqual(host.spawnCalls[0].control.cancelSignals, ["SIGINT"]);
 
+    releaseAcceptance();
     host.scriptRunning(502);
     const resumed = await fixture.createEngine({ cancellation: undefined }).run();
     assert.equal(resumed.status, "succeeded");
     assert.equal(resumed.state.fireAndForgetProcesses[0].generation, 2);
   } finally {
+    releaseAcceptance();
+    await running?.catch(() => undefined);
     await fixture.cleanup();
   }
 });

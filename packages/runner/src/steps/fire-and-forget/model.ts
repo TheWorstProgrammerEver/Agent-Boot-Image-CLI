@@ -37,7 +37,7 @@ export interface FireAndForgetSupervisorOptions {
   readonly plan: RunnerPlanIdentity;
   readonly policy: FireAndForgetPolicy;
   readonly stateStore: FireAndForgetStateStore;
-  readonly wait?: (milliseconds: number) => Promise<void>;
+  readonly wait?: (milliseconds: number, cancellation: AbortSignal) => Promise<void>;
 }
 
 export interface TrackedProcessResult {

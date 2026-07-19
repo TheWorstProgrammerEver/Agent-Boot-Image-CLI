@@ -107,7 +107,7 @@ export interface RunnerEngineOptions {
   readonly commandHost: SpawnHost;
   readonly environment: RunnerEnvironmentOptions;
   readonly fireAndForgetPolicy: FireAndForgetPolicy;
-  readonly lifecycleWait?: (milliseconds: number) => Promise<void>;
+  readonly lifecycleWait?: (milliseconds: number, cancellation: AbortSignal) => Promise<void>;
   readonly manualPolicy: ManualStepPolicy;
   readonly manualScheduler?: ManualStepScheduler;
   readonly onProgress?: (progress: RunnerProgress) => void;
