@@ -57,9 +57,13 @@ const readIdentity = async (path: string): Promise<string | undefined> => {
   }
 };
 
-const recoverStaleLock = async (path: string, observedIdentity: string): Promise<boolean> => {
-  const releaseRecovery = await tryAcquireOwnedLock(`${path}.recovery`);
-  if (releaseRecovery === undefined) return false;
+async function recoverStaleLock(
+  path: string,
+  observedIdentity: string,
+  deadline: number,
+  pollMs: number,
+): Promise<boolean> {
+  const releaseRecovery = await acquireFileLockUntil(`${path}.recovery`, deadline, pollMs);
 
   try {
     const currentIdentity = await readIdentity(path);
@@ -73,22 +77,32 @@ const recoverStaleLock = async (path: string, observedIdentity: string): Promise
   } finally {
     await releaseRecovery();
   }
-};
+}
 
-export const acquireFileLock = async (
+async function acquireFileLockUntil(
   path: string,
-  timeoutMs: number,
+  deadline: number,
   pollMs: number,
-): Promise<() => Promise<void>> => {
-  const deadline = Date.now() + timeoutMs;
+): Promise<ReleaseLock> {
   while (Date.now() <= deadline) {
     const release = await tryAcquireOwnedLock(path);
     if (release !== undefined) return release;
 
     const observedIdentity = await readIdentity(path);
     if (observedIdentity === undefined) continue;
-    if (!ownerIsAlive(observedIdentity) && await recoverStaleLock(path, observedIdentity)) continue;
+    if (
+      !ownerIsAlive(observedIdentity)
+      && await recoverStaleLock(path, observedIdentity, deadline, pollMs)
+    ) continue;
     await delay(pollMs);
   }
   throw new ArtifactAcquisitionError("lock-timeout");
+}
+
+export const acquireFileLock = async (
+  path: string,
+  timeoutMs: number,
+  pollMs: number,
+): Promise<ReleaseLock> => {
+  return acquireFileLockUntil(path, Date.now() + timeoutMs, pollMs);
 };
