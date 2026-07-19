@@ -1,6 +1,18 @@
 # `@agent-boot/runner`
 
-The runner checkpoint store persists only recovery-critical state. It records the exact runner-plan
+`RunnerEngine` validates the exact serialized runner plan before execution and currently accepts
+only environment and foreground automatic steps. A plan containing a later executor kind fails as
+incompatible before any command starts, so adding manual, fire-and-forget, prompt, provider, and
+secret executors cannot accidentally produce a partial run.
+
+The engine snapshots its configured account home, default working directory, and base `PATH`.
+Completed environment set/unset operations are deterministically replayed from the immutable plan
+when forming each separately spawned child environment. Automatic commands use managed foreground
+processes, checkpoint only after exit code zero, and obey explicit maximum-attempt and timeout
+bounds. Progress and terminal failures contain only step identity, attempt, exit status, signal, and
+recovery action; command output, arguments, and environment values are excluded.
+
+The checkpoint store persists only recovery-critical state. It records the exact runner-plan
 identity, monotonic step attempts, secret-install transaction phases, terminal outcome, and
 structured diagnostics that cannot contain command output or secret values.
 
