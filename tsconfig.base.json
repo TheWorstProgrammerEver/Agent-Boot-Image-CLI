@@ -23,6 +23,8 @@
       "@agent-boot/assembly": ["./packages/assembly/src/index.ts"],
       "@agent-boot/definition": ["./packages/definition/src/index.ts"],
       "@agent-boot/os-linux": ["./packages/os-linux/src/index.ts"],
+      "@agent-boot/os-adapters": ["./packages/os-adapters/src/index.ts"],
+      "@agent-boot/os-adapters/catalog": ["./packages/os-adapters/src/catalog/index.ts"],
       "@agent-boot/process": ["./packages/process/src/index.ts"],
       "@agent-boot/protocol": ["./packages/protocol/src/index.ts"],
       "@agent-boot/synth": ["./packages/synth/src/index.ts"]

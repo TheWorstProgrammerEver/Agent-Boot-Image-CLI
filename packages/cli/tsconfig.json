@@ -12,6 +12,7 @@
     { "path": "../synth" },
     { "path": "../process" },
     { "path": "../protocol" },
+    { "path": "../os-adapters" },
     { "path": "../os-linux" },
     { "path": "../runner" }
   ]

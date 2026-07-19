@@ -33,3 +33,4 @@ export {
   type ImageTargetPlan,
   type ImageTargetRequest,
 } from "./drives/index.js";
+export * from "./images/index.js";

@@ -73,3 +73,17 @@ expected model, serial, removable status, transport, and maximum size. It prints
 a redacted plan before interactive acknowledgement or `--yes`, then resolves
 and rechecks the complete target identity immediately before entering the
 downstream lock callback. This package does not implement unmounting or writes.
+
+## Immutable OS artifact cache
+
+The `@agent-boot/cli/images` API acquires only OS locks that exactly match the curated
+`@agent-boot/os-adapters` catalog. Artifacts are keyed solely by their pinned SHA-256 digest.
+HTTP redirects are rejected; interrupted downloads resume only after a valid `Content-Range`
+response, and servers that ignore `Range` cause a safe full restart. A partial file is never
+promoted to the final cache path until its pinned byte length and SHA-256 digest both match.
+
+Every cache hit is reverified. Corrupt final entries are moved into the cache quarantine before
+replacement, while checksum-mismatched downloads are discarded. Per-digest locks serialize
+concurrent writers, and the final rename is atomic. The returned metadata distinguishes the XZ
+container from the raw image and includes both compressed and decompressed byte lengths for later
+device guardrails and streaming writers.
