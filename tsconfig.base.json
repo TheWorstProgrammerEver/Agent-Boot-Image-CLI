@@ -22,6 +22,7 @@
     "paths": {
       "@agent-boot/assembly": ["./packages/assembly/src/index.ts"],
       "@agent-boot/definition": ["./packages/definition/src/index.ts"],
+      "@agent-boot/process": ["./packages/process/src/index.ts"],
       "@agent-boot/protocol": ["./packages/protocol/src/index.ts"],
       "@agent-boot/synth": ["./packages/synth/src/index.ts"]
     },
