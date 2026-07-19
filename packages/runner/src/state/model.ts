@@ -30,6 +30,9 @@ export interface SecretTransactionCheckpoint {
 
 export type RunnerDiagnosticCode =
   | "step-attempt-failed"
+  | "manual-command-failed"
+  | "manual-completion-check-failed"
+  | "manual-gate-incomplete"
   | "secret-transaction-failed"
   | "state-persistence-failed"
   | "manual-intervention-required";

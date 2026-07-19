@@ -8,7 +8,15 @@ import {
 } from "../state/index.js";
 import { AutomaticStepExecutor } from "../steps/automatic/index.js";
 import { RunnerEnvironment } from "../steps/environment/index.js";
-import { loadRunnerPlan, validateAutomaticPolicy } from "./configuration.js";
+import {
+  ManualStepExecutor,
+  type ManualStepProgress,
+} from "../steps/manual/index.js";
+import {
+  loadRunnerPlan,
+  validateAutomaticPolicy,
+  validateManualPolicy,
+} from "./configuration.js";
 import type {
   RunnerEngineOptions,
   RunnerExecutionResult,
@@ -42,6 +50,7 @@ export class RunnerEngine {
   readonly #automatic: AutomaticStepExecutor;
   readonly #environment: RunnerEnvironment;
   readonly #identity;
+  readonly #manual: ManualStepExecutor;
   readonly #maxAttempts: number;
   readonly #onProgress: ((progress: RunnerProgress) => void) | undefined;
   readonly #plan: RunnerPlan;
@@ -49,6 +58,7 @@ export class RunnerEngine {
 
   constructor(options: RunnerEngineOptions) {
     validateAutomaticPolicy(options.automaticPolicy);
+    validateManualPolicy(options.manualPolicy);
     this.#plan = loadRunnerPlan(options.serializedPlan);
     this.#identity = identifyRunnerPlan(this.#plan, options.serializedPlan);
     this.#environment = new RunnerEnvironment(options.environment);
@@ -56,6 +66,12 @@ export class RunnerEngine {
       options.commandHost,
       this.#environment,
       options.automaticPolicy,
+    );
+    this.#manual = new ManualStepExecutor(
+      options.commandHost,
+      this.#environment,
+      options.manualPolicy,
+      options.manualScheduler,
     );
     this.#maxAttempts = options.automaticPolicy.maxAttempts;
     this.#onProgress = options.onProgress;
@@ -146,6 +162,42 @@ export class RunnerEngine {
         this.#emitStepSucceeded(checkpoint);
         continue;
       }
+      if (step.kind === "manual") {
+        const environment = this.#environment.forStep(this.#plan.steps, pending.index);
+        const attempt = await this.#manual.execute(
+          step,
+          environment,
+          !pending.shouldCheckpointStart,
+          (progress) => {
+            this.#emitManualProgress(checkpoint, progress);
+          },
+        );
+        if (attempt.status === "succeeded") {
+          checkpoint = { ...checkpoint, phase: "succeeded" };
+          state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
+          this.#emitStepSucceeded(checkpoint);
+          continue;
+        }
+        checkpoint = { ...checkpoint, phase: "failed" };
+        state = await this.#stateStore.checkpointStep(this.#identity, checkpoint);
+        const diagnostic: RunnerDiagnostic = {
+          attempt: checkpoint.attempt,
+          code: attempt.code,
+          exitCode: attempt.exitCode,
+          recovery: "manual-intervention",
+          signal: attempt.signal,
+          stepId: checkpoint.id,
+        };
+        this.#emit({
+          diagnostic,
+          index: checkpoint.index,
+          status: "manual-terminal-failure",
+          stepId: checkpoint.id,
+        });
+        state = await this.#stateStore.markFailed(this.#identity, diagnostic);
+        this.#emit({ diagnostic, status: "runner-failed" });
+        return { state, status: "failed" };
+      }
       if (step.kind !== "automatic") {
         throw new Error("Invariant violation: unsupported step passed preflight");
       }
@@ -195,6 +247,37 @@ export class RunnerEngine {
 
   #emit(progress: RunnerProgress): void {
     this.#onProgress?.(progress);
+  }
+
+  #emitManualProgress(
+    checkpoint: StepCheckpoint,
+    progress: ManualStepProgress,
+  ): void {
+    if (progress.status === "waiting") {
+      this.#emit({
+        index: checkpoint.index,
+        resumed: progress.resumed,
+        status: "manual-waiting",
+        stepId: checkpoint.id,
+      });
+      return;
+    }
+    if (progress.status === "retry") {
+      this.#emit({
+        check: progress.check,
+        delayMs: progress.delayMs,
+        index: checkpoint.index,
+        status: "manual-check-retry",
+        stepId: checkpoint.id,
+      });
+      return;
+    }
+    this.#emit({
+      check: progress.check,
+      index: checkpoint.index,
+      status: "manual-completed",
+      stepId: checkpoint.id,
+    });
   }
 
   #emitStepSucceeded(checkpoint: StepCheckpoint): void {

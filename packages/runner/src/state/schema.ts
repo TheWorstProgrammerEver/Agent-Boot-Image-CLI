@@ -155,6 +155,9 @@ const parseSecretTransaction = (
 
 const diagnosticCodes = new Set<RunnerDiagnosticCode>([
   "step-attempt-failed",
+  "manual-command-failed",
+  "manual-completion-check-failed",
+  "manual-gate-incomplete",
   "secret-transaction-failed",
   "state-persistence-failed",
   "manual-intervention-required",
