@@ -182,6 +182,68 @@ test("read-back verifier preserves operation and handle-close failures", async (
   });
 });
 
+test("raw adapters await stream completion when cancellation cleanup throws", async t => {
+  const cases = [
+    {
+      createAdapter: target => new ExactRawImageWriter({
+        openRead: async () => target,
+        openWrite: async () => target,
+      }),
+      invoke: (adapter, options) => adapter.write(options),
+      name: "writer",
+      operationFailure: new ImageWriteError("short-write", "fixture write failure"),
+    },
+    {
+      createAdapter: target => new FullReadBackVerifier({
+        openRead: async () => target,
+        openWrite: async () => target,
+      }),
+      invoke: (adapter, options) => adapter.verify(options),
+      name: "verifier",
+      operationFailure: new ImageWriteError("short-read", "fixture read failure"),
+    },
+  ];
+
+  for (const fixture of cases) {
+    await t.test(fixture.name, async () => {
+      const cancelFailure = new Error(`fixture ${fixture.name} cancel failure`);
+      let completionAwaited = false;
+      const source = {
+        open: () => ({
+          cancel: () => { throw cancelFailure; },
+          chunks: (async function* () { yield Uint8Array.of(1, 2, 3, 4); })(),
+          completion: {
+            then: resolve => {
+              completionAwaited = true;
+              resolve();
+            },
+          },
+        }),
+      };
+      const target = {
+        close: async () => undefined,
+        read: async () => { throw fixture.operationFailure; },
+        sync: async () => undefined,
+        write: async () => { throw fixture.operationFailure; },
+      };
+
+      await assert.rejects(fixture.invoke(fixture.createAdapter(target), {
+        cancellation: new globalThis.AbortController().signal,
+        expectedByteLength: 4,
+        source,
+        targetPath: "/fixture/target.raw",
+      }), error => {
+        assert.ok(error instanceof ImageWriteError);
+        assert.equal(error.code, "cleanup-failed");
+        assert.ok(error.cause instanceof AggregateError);
+        assert.deepEqual(error.cause.errors, [fixture.operationFailure, cancelFailure]);
+        return true;
+      });
+      assert.equal(completionAwaited, true);
+    });
+  }
+});
+
 test("cancellation stops and awaits an active image stream", async () => {
   const cancellation = new globalThis.AbortController();
   let canceled = 0;

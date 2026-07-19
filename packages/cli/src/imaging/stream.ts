@@ -42,6 +42,7 @@ export const withImageStream = async <T>(
   }
 
   let completed = false;
+  let operationError: Error | undefined;
   try {
     const result = await consume(stream.chunks);
     await stream.completion;
@@ -49,13 +50,28 @@ export const withImageStream = async <T>(
     throwIfCanceled(cancellation);
     return result;
   } catch (error) {
-    throw asSourceFailure(error, cancellation);
+    operationError = asSourceFailure(error, cancellation);
+    throw operationError;
   } finally {
-    if (!completed) stream.cancel();
-    try {
-      await stream.completion;
-    } catch {
-      // The operation error remains primary; completion is awaited to prevent orphan producers.
+    if (!completed) {
+      let cancelError: unknown;
+      try {
+        stream.cancel();
+      } catch (error) {
+        cancelError = error;
+      }
+      try {
+        await stream.completion;
+      } catch {
+        // The operation error remains primary; completion is awaited to prevent orphan producers.
+      }
+      if (cancelError !== undefined) {
+        throw new ImageWriteError("cleanup-failed", "Image stream cleanup did not complete.", {
+          cause: new AggregateError(
+            operationError === undefined ? [cancelError] : [operationError, cancelError],
+          ),
+        });
+      }
     }
   }
 };
