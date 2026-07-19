@@ -83,8 +83,8 @@ export class InstallUserSecretExecutor {
     if (transaction.phase === "prepared") {
       this.#notify("before-install");
       const source = await this.#source.read(sourcePath);
-      await this.#destination.install(destination.home, destination.path, source.contents);
-      await this.#destination.verify(destination.path, source.contents);
+      await this.#destination.install(destination, source.contents);
+      await this.#destination.verify(destination, source.contents);
       this.#notify("after-install");
       transaction = this.#transaction(step, "installed");
       await this.#checkpoint(transaction, checkpoint);
@@ -92,7 +92,7 @@ export class InstallUserSecretExecutor {
     if (transaction.phase === "installed") {
       this.#notify("before-source-remove");
       const source = await this.#source.readIfPresent(sourcePath);
-      await this.#destination.verify(destination.path, source?.contents);
+      await this.#destination.verify(destination, source?.contents);
       if (source !== undefined) await this.#source.remove(sourcePath, source.status);
       this.#notify("after-source-remove");
       this.#onRemovalDiagnostic?.({
@@ -104,13 +104,13 @@ export class InstallUserSecretExecutor {
     }
     if (transaction.phase === "source-removed") {
       await this.#requireSourceAbsent(sourcePath);
-      await this.#destination.verify(destination.path);
+      await this.#destination.verify(destination);
       transaction = this.#transaction(step, "committed");
       await this.#checkpoint(transaction, checkpoint);
     }
     if (transaction.phase === "committed") {
       await this.#requireSourceAbsent(sourcePath);
-      await this.#destination.verify(destination.path);
+      await this.#destination.verify(destination);
     }
   }
 

@@ -7,6 +7,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  rename,
   rm,
   stat,
   symlink,
@@ -43,16 +44,31 @@ test("installs, verifies, removes, and idempotently checkpoints a user secret", 
   const fixture = await createUserSecretFixture({
     engineOptions: { onProgress: event => progress.push(event) },
   });
-  const orphan = join(dirname(fixture.destination), ".credential.abandoned.tmp");
+  const orphan = join(
+    dirname(fixture.destination),
+    ".credential.4c6566a8-8177-4a77-b9c1-9f3aec249d4c.tmp",
+  );
+  const unrelated = join(dirname(fixture.destination), ".credential.user-backup.tmp");
+  const suspiciousTarget = join(fixture.root, "suspicious-temp-target");
+  const suspicious = join(
+    dirname(fixture.destination),
+    ".credential.73dcae43-7d1f-4388-8c0d-e77a8677f28f.tmp",
+  );
   try {
     await mkdir(dirname(fixture.destination), { recursive: true });
     await writeFile(orphan, secretContents, { mode: 0o600 });
+    await writeFile(unrelated, "keep me\n", { mode: 0o600 });
+    await writeFile(suspiciousTarget, "keep this too\n", { mode: 0o600 });
+    await symlink(suspiciousTarget, suspicious);
     const result = await fixture.engine.run();
 
     assert.equal(result.status, "succeeded");
     assert.deepEqual(await readFile(fixture.destination), secretContents);
     await absent(fixture.source);
     await absent(orphan);
+    assert.equal(await readFile(unrelated, "utf8"), "keep me\n");
+    assert.equal((await lstat(suspicious)).isSymbolicLink(), true);
+    assert.equal(await readFile(suspiciousTarget, "utf8"), "keep this too\n");
     assert.equal(await privateMode(dirname(fixture.destination)), 0o700);
     assert.equal(await privateMode(fixture.destination), 0o600);
     const destinationStatus = await stat(fixture.destination);
@@ -83,6 +99,104 @@ test("installs, verifies, removes, and idempotently checkpoints a user secret", 
     assert.equal(resumed.status, "succeeded");
     assert.deepEqual(await readFile(fixture.destination), secretContents);
     await absent(fixture.source);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+class SwapDestinationTemporaryFileSystem extends NodeUserSecretFileSystem {
+  outside;
+  swapped = false;
+
+  configure(outside) {
+    this.outside = outside;
+  }
+
+  async openAt(directory, name, flags, mode) {
+    const handle = await super.openAt(directory, name, flags, mode);
+    if (!this.swapped && /^\.credential\..+\.tmp$/u.test(name)) {
+      const entry = `/proc/self/fd/${String(directory.descriptor)}/${name}`;
+      await unlink(entry);
+      await symlink(this.outside, entry);
+      this.swapped = true;
+    }
+    return handle;
+  }
+}
+
+test("a destination-temp symlink swap cannot redirect privileged mutations", async () => {
+  const fileSystem = new SwapDestinationTemporaryFileSystem();
+  const fixture = await createUserSecretFixture({
+    userSecretInstallation: { fileSystem },
+  });
+  const outside = join(fixture.root, "outside-file");
+  try {
+    await writeFile(outside, "outside\n", { mode: 0o644 });
+    fileSystem.configure(outside);
+
+    const before = await stat(outside);
+    const result = await fixture.engine.run();
+    const after = await stat(outside);
+
+    assert.equal(fileSystem.swapped, true);
+    assert.equal(result.status, "failed");
+    assert.equal(after.mode & 0o777, before.mode & 0o777);
+    assert.equal(after.uid, before.uid);
+    assert.equal(after.gid, before.gid);
+    assert.equal(await readFile(outside, "utf8"), "outside\n");
+    assert.deepEqual(await readFile(fixture.source), secretContents);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+class SwapDestinationDirectoryFileSystem extends NodeUserSecretFileSystem {
+  accountComponent;
+  displacedComponent;
+  outside;
+  swapped = false;
+
+  configure({ accountComponent, displacedComponent, outside }) {
+    this.accountComponent = accountComponent;
+    this.displacedComponent = displacedComponent;
+    this.outside = outside;
+  }
+
+  async openAt(directory, name, flags, mode) {
+    const handle = await super.openAt(directory, name, flags, mode);
+    if (!this.swapped && name === ".config") {
+      await rename(this.accountComponent, this.displacedComponent);
+      await symlink(this.outside, this.accountComponent);
+      this.swapped = true;
+    }
+    return handle;
+  }
+}
+
+test("a destination-directory symlink swap cannot redirect privileged mutations", async () => {
+  const fileSystem = new SwapDestinationDirectoryFileSystem();
+  const fixture = await createUserSecretFixture({
+    userSecretInstallation: { fileSystem },
+  });
+  const accountComponent = join(fixture.home, ".config");
+  const displacedComponent = join(fixture.home, ".config-displaced");
+  const outside = join(fixture.root, "outside");
+  try {
+    await mkdir(accountComponent, { mode: 0o700 });
+    await mkdir(outside, { mode: 0o755 });
+    fileSystem.configure({ accountComponent, displacedComponent, outside });
+
+    const before = await stat(outside);
+    const result = await fixture.engine.run();
+    const after = await stat(outside);
+
+    assert.equal(fileSystem.swapped, true);
+    assert.equal(result.status, "failed");
+    assert.equal(after.mode & 0o777, before.mode & 0o777);
+    assert.equal(after.uid, before.uid);
+    assert.equal(after.gid, before.gid);
+    assert.deepEqual(await readFile(fixture.source), secretContents);
+    await absent(join(outside, "service", "credential"));
   } finally {
     await fixture.cleanup();
   }
@@ -278,9 +392,9 @@ test("every transaction interruption boundary recovers after reboot", async t =>
 class RenameThenInterruptFileSystem extends NodeUserSecretFileSystem {
   interrupted = false;
 
-  async rename(from, to) {
-    await super.rename(from, to);
-    if (!this.interrupted && to.endsWith("/credential")) {
+  async renameAt(directory, from, to) {
+    await super.renameAt(directory, from, to);
+    if (!this.interrupted && to === "credential") {
       this.interrupted = true;
       throw new Error("simulated rename interruption");
     }

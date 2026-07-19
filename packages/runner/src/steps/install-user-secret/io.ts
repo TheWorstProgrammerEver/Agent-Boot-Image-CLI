@@ -45,3 +45,15 @@ export const unlinkIfPresent = async (
     if (errorCode(error) !== "ENOENT") throw error;
   }
 };
+
+export const unlinkAtIfPresent = async (
+  fileSystem: UserSecretFileSystem,
+  directory: UserSecretFileHandle,
+  name: string,
+): Promise<void> => {
+  try {
+    await fileSystem.unlinkAt(directory, name);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
+};
