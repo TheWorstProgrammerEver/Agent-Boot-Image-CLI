@@ -68,6 +68,20 @@ export class ProviderStepExecutor {
     },
     cancellation?: AbortSignal,
   ): Promise<ProviderAttemptResult> {
+    const input = {
+      ...(cancellation === undefined ? {} : { cancellation }),
+      cwd: this.#environment.workingDirectoryFor(descriptor.command),
+      descriptor,
+      environment: environments.providerEnvironment,
+      step,
+      timeoutMs: this.#policy.timeoutMs,
+    };
+    try {
+      await this.#adapter.prepare(input);
+    } catch {
+      return failed("provider-execution-failed");
+    }
+
     let prompt: Uint8Array;
     try {
       prompt = (
@@ -85,12 +99,8 @@ export class ProviderStepExecutor {
 
     try {
       const command = this.#adapter.createProcess({
-        cwd: this.#environment.workingDirectoryFor(descriptor.command),
-        descriptor,
-        environment: environments.providerEnvironment,
+        ...input,
         prompt,
-        step,
-        timeoutMs: this.#policy.timeoutMs,
       });
       const result = await this.#commandHost.spawn({
         ...command,

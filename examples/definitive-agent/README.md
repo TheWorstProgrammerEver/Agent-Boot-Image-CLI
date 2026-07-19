@@ -4,7 +4,9 @@ This host-neutral example preserves the authoritative Agent Boot scratchpad's
 ordered bootstrap semantics without copying its illustrative credentials,
 network identity, key filenames, or agent-local identity.
 
-Replace `<network-ssid>` and `<reviewed-version>` during deployment planning.
+Replace `<network-ssid>` during deployment planning. Codex `0.144.6` is the
+reviewed exact version for this fixture; update the pin and its verification
+step together when deliberately upgrading it.
 Supply the three referenced secrets through the future imaging workflow; do not
 put their contents in this directory. `installUserSecret()` represents the
 transactional install primitive, including protected destination creation,

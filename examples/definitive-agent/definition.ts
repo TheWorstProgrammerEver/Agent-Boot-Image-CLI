@@ -1,15 +1,13 @@
 import {
-  automatic,
+  codexProvider,
   command,
   curatedOperatingSystem,
   defineAgent,
   fireAndForget,
   fromEnvironment,
   installUserSecret,
-  manual,
   prompt,
   promptVariable,
-  provider,
   renderPrompt,
   runProvider,
   secret,
@@ -34,12 +32,11 @@ const bootstrapPrompt = prompt(
   "./prompts/bootstrap-agent.md",
   ["agent-name"],
 );
-const codex = provider(
-  "codex",
-  command("codex", ["exec", "-"], {
-    workingDirectory: { scope: "user-home", path: "workspace" },
-  }),
-);
+const codex = codexProvider({
+  authentication: { kind: "manual-device-auth", pollIntervalSeconds: 2 },
+  version: "0.144.6",
+  workingRoot: { scope: "user-home", path: "workspace" },
+});
 
 export default defineAgent({
   definitionUrl: import.meta.url,
@@ -57,40 +54,11 @@ export default defineAgent({
     },
   },
   prompts: [bootstrapPrompt],
-  providers: [codex],
+  providers: [codex.provider],
   steps: [
     setEnvironment("set-agent-name", "AGENT_NAME", "My Agent"),
     setEnvironment("enter-bootstrap-mode", "BOOTSTRAP_MODE", "true"),
-    automatic(
-      "install-codex",
-      command("npm", ["install", "--global", "@openai/codex@<reviewed-version>"]),
-    ),
-    automatic(
-      "configure-codex-yolo-profile",
-      command("agent-boot-configure-codex", [
-        "--sandbox-mode",
-        "danger-full-access",
-        "--approval-policy",
-        "never",
-        "--working-root",
-        "/home/my-user/workspace",
-      ]),
-    ),
-    automatic(
-      "verify-codex-yolo-profile",
-      command("agent-boot-verify-codex", [
-        "--sandbox-mode",
-        "danger-full-access",
-        "--approval-policy",
-        "never",
-      ]),
-    ),
-    manual(
-      "authenticate-codex",
-      command("codex", ["login", "--device-auth"]),
-      command("codex", ["login", "status"]),
-      2,
-    ),
+    ...codex.bootstrapSteps,
     fireAndForget(
       "start-agent-support-service",
       command("agent-support-service", ["--foreground"]),
@@ -104,6 +72,6 @@ export default defineAgent({
     renderPrompt("render-bootstrap-prompt", bootstrapPrompt, "bootstrap-prompt", [
       promptVariable("agent-name", fromEnvironment("AGENT_NAME")),
     ]),
-    runProvider("run-codex-bootstrap", codex, "bootstrap-prompt"),
+    runProvider("run-codex-bootstrap", codex.provider, "bootstrap-prompt"),
   ],
 });

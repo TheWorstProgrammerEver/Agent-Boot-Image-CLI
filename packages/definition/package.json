@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./providers/codex": {
+      "types": "./dist/providers/codex.d.ts",
+      "default": "./dist/providers/codex.js"
     }
   },
   "files": ["dist", "README.md"],
