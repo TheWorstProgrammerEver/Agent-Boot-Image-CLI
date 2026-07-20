@@ -95,12 +95,14 @@ const createAssembly = async root => {
 
 export class FakeOwnership {
   identities = new Map();
+  sets = [];
 
   async inspect(path) {
     return this.identities.get(path) ?? { gid: 0, uid: 0 };
   }
 
   async set(path, identity) {
+    this.sets.push(path);
     this.identities.set(path, { gid: identity.gid, uid: identity.uid });
   }
 }
@@ -136,6 +138,7 @@ export const createAdapterFixture = async () => {
   const image = join(root, "image");
   await cp(imageFixture, image, { recursive: true });
   const boot = join(image, "boot");
+  await chmod(boot, 0o700);
   const systemRoot = join(image, "root");
   const assembly = await createAssembly(root);
   const runtime = await createRuntime(root);
@@ -156,8 +159,25 @@ export const createAdapterFixture = async () => {
   });
   const osLock = JSON.parse(await readFile(lockFixture, "utf8"));
   const partitions = [
-    { filesystem: "fat32", label: "bootfs", mountPath: boot, role: "boot" },
-    { filesystem: "ext4", label: "rootfs", mountPath: systemRoot, role: "root" },
+    {
+      filesystem: "fat32",
+      label: "bootfs",
+      metadata: {
+        directoryMode: 0o700,
+        fileMode: 0o600,
+        identity: { gid: 0, uid: 0 },
+        kind: "uniform",
+      },
+      mountPath: boot,
+      role: "boot",
+    },
+    {
+      filesystem: "ext4",
+      label: "rootfs",
+      metadata: { kind: "per-entry" },
+      mountPath: systemRoot,
+      role: "root",
+    },
   ];
   const ownership = new FakeOwnership();
   return {

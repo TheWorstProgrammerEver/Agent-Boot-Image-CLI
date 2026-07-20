@@ -61,7 +61,7 @@ test("customizes the golden Trixie roots and is byte-stable on repeat", async ()
     });
     assert.equal(await mode(join(fixture.boot, "network-config")), 0o600);
     assert.equal(await mode(join(fixture.boot, "userconf")), 0o600);
-    assert.equal(await mode(join(fixture.boot, "ssh")), 0o644);
+    assert.equal(await mode(join(fixture.boot, "ssh")), 0o600);
     const userconf = await readFile(join(fixture.boot, "userconf"), "utf8");
     assert.match(userconf, /^my-user:\$6\$fixturesalt\$/u);
     assert.doesNotMatch(userconf, /fixture-account-password/u);
@@ -97,6 +97,14 @@ test("customizes the golden Trixie roots and is byte-stable on repeat", async ()
       /^PasswordAuthentication yes$/mu,
     );
     assert.equal(await readFile(join(systemRoot, "etc/hostname"), "utf8"), "fixture-agent\n");
+    assert.match(
+      await readFile(join(systemRoot, "etc/fstab"), "utf8"),
+      /\/boot\/firmware\s+vfat\s+defaults,uid=0,gid=0,fmask=0177,dmask=0077/u,
+    );
+    assert.equal(
+      fixture.ownership.sets.some(path => path.startsWith(`${fixture.boot}/`)),
+      false,
+    );
 
     assert.deepEqual(
       fixture.ownership.identities.get(join(systemRoot, "etc/agent-boot/bootstrap-secrets/credential")),
@@ -129,9 +137,20 @@ test("rejects partition label and shape drift before modifying either root", asy
     ["extra partition", partitions => [...partitions, {
       filesystem: "ext4",
       label: "data",
+      metadata: { kind: "per-entry" },
       mountPath: partitions[1].mountPath,
       role: "data",
     }]],
+    ["unsafe FAT metadata", partitions => partitions.map(partition =>
+      partition.role === "boot" ? {
+        ...partition,
+        metadata: { ...partition.metadata, fileMode: 0o644 },
+      } : partition)],
+    ["unsafe FAT ownership", partitions => partitions.map(partition =>
+      partition.role === "boot" ? {
+        ...partition,
+        metadata: { ...partition.metadata, identity: { gid: 1000, uid: 1000 } },
+      } : partition)],
   ]) await t.test(name, async () => {
     const fixture = await createAdapterFixture();
     try {
@@ -163,6 +182,20 @@ test("rejects incompatible release markers and occupied first-user identities", 
       join(fixture.systemRoot, "etc/passwd"),
       "root:x:0:0:root:/root:/bin/bash\nother:x:1000:1000::/home/other:/bin/bash\n",
     )],
+    ["target-name collision", async fixture => {
+      await writeFile(
+        join(fixture.systemRoot, "etc/passwd"),
+        "root:x:0:0:root:/root:/bin/bash\npi:x:1000:1000::/home/pi:/bin/bash\nmy-user:x:1001:1001::/home/my-user:/bin/bash\n",
+      );
+      await writeFile(
+        join(fixture.systemRoot, "etc/group"),
+        "root:x:0:\npi:x:1000:\nmy-user:x:1001:\n",
+      );
+    }],
+    ["incompatible boot fstab", fixture => writeFile(
+      join(fixture.systemRoot, "etc/fstab"),
+      "PARTUUID=fixture-01 /boot/firmware ext4 defaults 0 2\n",
+    )],
   ]) await t.test(name, async () => {
     const fixture = await createAdapterFixture();
     try {
@@ -177,6 +210,53 @@ test("rejects incompatible release markers and occupied first-user identities", 
       await fixture.cleanup();
     }
   });
+});
+
+test("accepts an already-renamed first-user identity", async () => {
+  const fixture = await createAdapterFixture();
+  try {
+    await writeFile(
+      join(fixture.systemRoot, "etc/passwd"),
+      "root:x:0:0:root:/root:/bin/bash\nmy-user:x:1000:1000:,,,:/home/my-user:/bin/bash\n",
+    );
+    await writeFile(
+      join(fixture.systemRoot, "etc/group"),
+      "root:x:0:\nmy-user:x:1000:\n",
+    );
+    const password = passwordHasher();
+    await customizeRaspberryPiOsTrixie(fixture.options({ passwordHasher: password.hasher }));
+    assert.match(await readFile(join(fixture.boot, "userconf"), "utf8"), /^my-user:/u);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("rejects usernames outside the Trixie userconf-pi grammar before discovery", async () => {
+  const fixture = await createAdapterFixture();
+  try {
+    const manifestPath = join(fixture.assembly, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.bootstrap.account.username = "my_user";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const discovery = new FakePartitionDiscovery(fixture.partitions);
+    await assert.rejects(
+      customizeRaspberryPiOsTrixie(fixture.options({
+        account: {
+          ...fixture.account,
+          group: "my_user",
+          homeDirectory: "/home/my_user",
+          username: "my_user",
+          workingDirectory: "/home/my_user/workspace",
+        },
+        partitionDiscovery: discovery,
+      })),
+      error => error instanceof RaspberryPiOsAdapterError && error.code === "invalid-input",
+    );
+    assert.equal(discovery.calls, 0);
+    await assert.rejects(readFile(join(fixture.boot, "userconf")));
+  } finally {
+    await fixture.cleanup();
+  }
 });
 
 test("rejects assembly traversal and source symlinks before partition discovery", async t => {

@@ -138,6 +138,7 @@ export const createRootPlan = async (
   secrets: ReadonlyMap<string, Uint8Array>,
   hostname: string | undefined,
   hostsContents: Uint8Array,
+  protectedBootFstab: Uint8Array,
 ): Promise<readonly ImagePlanEntry[]> => {
   const plan = new Plan();
   for (const entry of bundle.entries) {
@@ -196,6 +197,7 @@ export const createRootPlan = async (
     0o644,
     rootIdentity,
   );
+  plan.file("etc/fstab", protectedBootFstab, 0o644, rootIdentity);
   plan.link(
     "etc/systemd/system/multi-user.target.wants/agent-boot-runner.service",
     "../agent-boot-runner.service",
@@ -206,6 +208,28 @@ export const createRootPlan = async (
     plan.file("etc/hosts", renderHosts(hostsContents, hostname), 0o644, rootIdentity);
   }
   return plan.values();
+};
+
+const protectedBootOptions = ["uid=0", "gid=0", "fmask=0177", "dmask=0077"] as const;
+
+export const renderProtectedBootFstab = (input: Uint8Array): Uint8Array => {
+  const lines = Buffer.from(input).toString("utf8").trimEnd().split("\n");
+  const matches = lines.flatMap((line, index) => {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) return [];
+    const fields = trimmed.split(/\s+/u);
+    return fields[1] === "/boot/firmware" ? [{ fields, index }] : [];
+  });
+  const match = matches[0];
+  if (matches.length !== 1 || match === undefined || match.fields.length < 6 || match.fields[2] !== "vfat") {
+    throw adapterError("incompatible-image", "The boot filesystem table entry is incompatible.");
+  }
+  const options = match.fields[3]?.split(",") ?? [];
+  const retained = options.filter((option) =>
+    !/^(?:uid|gid|umask|fmask|dmask)=/u.test(option));
+  match.fields[3] = [...retained, ...protectedBootOptions].join(",");
+  lines[match.index] = match.fields.join("\t");
+  return Buffer.from(`${lines.join("\n")}\n`, "utf8");
 };
 
 const renderHosts = (input: Uint8Array, hostname: string): Uint8Array => {
@@ -223,6 +247,7 @@ export const validateAccount = (
 ): void => {
   const username = manifest.bootstrap.account.username;
   if (
+    !/^[a-z][a-z0-9-]*$/u.test(username) ||
     account.username !== username || account.group !== username ||
     account.homeDirectory !== `/home/${username}` ||
     !account.workingDirectory.startsWith(`${account.homeDirectory}/`) ||

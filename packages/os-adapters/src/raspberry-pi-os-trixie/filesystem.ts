@@ -18,7 +18,7 @@ import {
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { adapterError } from "./errors.js";
-import type { ImageIdentity, ImageOwnership } from "./model.js";
+import type { ImageFilesystemMetadata, ImageIdentity, ImageOwnership } from "./model.js";
 
 export type ImagePlanEntry =
   | {
@@ -88,21 +88,37 @@ const sameIdentity = (left: ImageIdentity, right: ImageIdentity): boolean =>
   left.uid === right.uid && left.gid === right.gid;
 
 export class SafeImageWriter {
+  readonly #metadata: ImageFilesystemMetadata;
   readonly #ownership: ImageOwnership;
   readonly #root: string;
 
-  private constructor(root: string, ownership: ImageOwnership) {
+  private constructor(
+    root: string,
+    ownership: ImageOwnership,
+    metadata: ImageFilesystemMetadata,
+  ) {
+    this.#metadata = metadata;
     this.#root = root;
     this.#ownership = ownership;
   }
 
-  static async create(rootInput: string, ownership: ImageOwnership): Promise<SafeImageWriter> {
+  static async create(
+    rootInput: string,
+    ownership: ImageOwnership,
+    metadata: ImageFilesystemMetadata,
+  ): Promise<SafeImageWriter> {
     const root = resolve(rootInput);
     const status = await lstat(root);
     if (!status.isDirectory() || status.isSymbolicLink() || resolve(await realpath(root)) !== root) {
       throw adapterError("unsafe-path", "An image root is unsafe.");
     }
-    return new SafeImageWriter(root, ownership);
+    if (metadata.kind === "uniform") {
+      const identity = await ownership.inspect(root);
+      if (modeOf(status.mode) !== metadata.directoryMode || !sameIdentity(identity, metadata.identity)) {
+        throw adapterError("incompatible-image", "The uniform image metadata contract is not active.");
+      }
+    }
+    return new SafeImageWriter(root, ownership, metadata);
   }
 
   async readOptional(path: string): Promise<Uint8Array | undefined> {
@@ -125,6 +141,9 @@ export class SafeImageWriter {
     for (const entry of entries) {
       if (paths.has(entry.path)) throw adapterError("invalid-input", "Target paths must be unique.");
       paths.add(entry.path);
+      if (this.#metadata.kind === "uniform" && entry.kind === "symlink") {
+        throw adapterError("invalid-input", "Uniform-metadata filesystems do not support target links.");
+      }
       const target = targetPath(this.#root, entry.path);
       await this.#assertParents(target, true);
       try {
@@ -166,23 +185,35 @@ export class SafeImageWriter {
       const target = targetPath(this.#root, entry.path);
       const status = await lstat(target);
       if (entry.kind === "directory") {
-        if (!status.isDirectory() || status.isSymbolicLink() || modeOf(status.mode) !== entry.mode) {
+        if (
+          !status.isDirectory() || status.isSymbolicLink() ||
+          modeOf(status.mode) !== this.#mode(entry)
+        ) {
           throw adapterError("postcondition-failed", "A target directory failed verification.");
         }
       } else if (entry.kind === "file") {
         if (
           !status.isFile() || status.isSymbolicLink() || status.nlink !== 1 ||
-          modeOf(status.mode) !== entry.mode ||
+          modeOf(status.mode) !== this.#mode(entry) ||
           !Buffer.from(await readFile(target)).equals(Buffer.from(entry.contents))
         ) throw adapterError("postcondition-failed", "A target file failed verification.");
       } else if (!status.isSymbolicLink() || await readlink(target) !== entry.linkTarget) {
         throw adapterError("postcondition-failed", "A target link failed verification.");
       }
       const actual = await this.#ownership.inspect(target, entry.kind === "symlink");
-      if (!sameIdentity(actual, entry.identity)) {
+      if (!sameIdentity(actual, this.#identity(entry))) {
         throw adapterError("postcondition-failed", "Target ownership failed verification.");
       }
     }
+  }
+
+  #identity(entry: ImagePlanEntry): ImageIdentity {
+    return this.#metadata.kind === "uniform" ? this.#metadata.identity : entry.identity;
+  }
+
+  #mode(entry: Exclude<ImagePlanEntry, { kind: "symlink" }>): number {
+    if (this.#metadata.kind === "per-entry") return entry.mode;
+    return entry.kind === "directory" ? this.#metadata.directoryMode : this.#metadata.fileMode;
   }
 
   async #assertParents(target: string, allowMissing = false): Promise<void> {
@@ -205,31 +236,37 @@ export class SafeImageWriter {
 
   async #directory(entry: Extract<ImagePlanEntry, { kind: "directory" }>): Promise<void> {
     const target = targetPath(this.#root, entry.path);
+    const expectedMode = this.#mode(entry);
+    const expectedIdentity = this.#identity(entry);
     try {
       const status = await lstat(target);
       const identity = await this.#ownership.inspect(target);
-      if (modeOf(status.mode) === entry.mode && sameIdentity(identity, entry.identity)) return;
+      if (modeOf(status.mode) === expectedMode && sameIdentity(identity, expectedIdentity)) return;
     } catch (error) {
       if (!isMissing(error)) throw error;
     }
     try {
-      await mkdir(target, { mode: entry.mode });
+      await mkdir(target, { mode: expectedMode });
     } catch (error) {
       if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
     }
-    await chmod(target, entry.mode);
-    await this.#ownership.set(target, entry.identity);
+    if (this.#metadata.kind === "per-entry") {
+      await chmod(target, expectedMode);
+      await this.#ownership.set(target, expectedIdentity);
+    }
   }
 
   async #file(entry: Extract<ImagePlanEntry, { kind: "file" }>): Promise<void> {
     const target = targetPath(this.#root, entry.path);
+    const expectedMode = this.#mode(entry);
+    const expectedIdentity = this.#identity(entry);
     const existing = await this.readOptional(entry.path);
     if (existing !== undefined) {
       const status = await lstat(target);
       const identity = await this.#ownership.inspect(target);
       if (
         Buffer.from(existing).equals(Buffer.from(entry.contents)) &&
-        modeOf(status.mode) === entry.mode && sameIdentity(identity, entry.identity)
+        modeOf(status.mode) === expectedMode && sameIdentity(identity, expectedIdentity)
       ) return;
     }
     const temporary = join(dirname(target), `.${basename(target)}.agent-boot-${randomUUID()}`);
@@ -238,16 +275,18 @@ export class SafeImageWriter {
       handle = await open(
         temporary,
         constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-        entry.mode,
+        expectedMode,
       );
       await handle.writeFile(entry.contents);
-      await handle.chmod(entry.mode);
+      if (this.#metadata.kind === "per-entry") await handle.chmod(expectedMode);
       await handle.sync();
       await handle.close();
       handle = undefined;
-      await this.#ownership.set(temporary, entry.identity);
+      if (this.#metadata.kind === "per-entry") {
+        await this.#ownership.set(temporary, expectedIdentity);
+      }
       await rename(temporary, target);
-      await this.#ownership.set(target, entry.identity);
+      if (this.#metadata.kind === "per-entry") await this.#ownership.set(target, expectedIdentity);
       await syncDirectory(dirname(target));
     } finally {
       await handle?.close();

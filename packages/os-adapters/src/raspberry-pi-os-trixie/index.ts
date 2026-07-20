@@ -5,6 +5,7 @@ export { assertNetworkConfig, renderNetworkConfig } from "./network-config.js";
 export { OpenSslPasswordHasher } from "./password.js";
 export type {
   ImageIdentity,
+  ImageFilesystemMetadata,
   ImageOwnership,
   MountedImagePartition,
   MountedPartitionDiscovery,

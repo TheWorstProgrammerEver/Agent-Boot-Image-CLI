@@ -4,6 +4,7 @@ import type { RunnerServiceAccount } from "@agent-boot/runner-bundle";
 export interface MountedImagePartition {
   readonly filesystem: string;
   readonly label: string;
+  readonly metadata: ImageFilesystemMetadata;
   readonly mountPath: string;
   readonly role: string;
 }
@@ -16,6 +17,15 @@ export interface ImageIdentity {
   readonly gid: number;
   readonly uid: number;
 }
+
+export type ImageFilesystemMetadata =
+  | { readonly kind: "per-entry" }
+  | {
+      readonly directoryMode: number;
+      readonly fileMode: number;
+      readonly identity: ImageIdentity;
+      readonly kind: "uniform";
+    };
 
 export interface ImageOwnership {
   inspect(path: string, symbolicLink?: boolean): Promise<ImageIdentity>;

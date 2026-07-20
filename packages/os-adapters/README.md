@@ -34,6 +34,14 @@ Netplan v2 `/boot/firmware/network-config` seed with the NetworkManager renderer
 hashing uses deliberate stdin through an injected command host, and repeat customization reuses the
 existing SHA-512 crypt salt so the image remains byte-stable.
 
+Because FAT32 cannot store per-file POSIX ownership or mode bits, the mounted `bootfs` contract is
+uniform root ownership with directories exposed as `0700` and files as `0600`. Image orchestration
+must mount it with equivalent `uid=0,gid=0,fmask=0177,dmask=0077` options and report those
+capabilities to the adapter. The adapter rejects a weaker mount before writing and persists the same
+options in `/etc/fstab`, keeping the plaintext one-time Wi-Fi seed inaccessible to non-root Linux
+users. This is operating-system access control, not encryption against someone reading the physical
+media.
+
 `PosixImageOwnership` applies numeric ownership for privileged image customization. Tests inject
 fixture ownership, partition discovery, and command adapters, so they never mount an image, touch a
 device, change a host account or network, or start a service. Returned post-customization assertions

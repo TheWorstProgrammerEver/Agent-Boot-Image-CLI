@@ -1,13 +1,32 @@
 import type { OsLock } from "@agent-boot/protocol";
 
 import { adapterError } from "./errors.js";
-import type { MountedImagePartition, MountedPartitionDiscovery } from "./model.js";
+import type {
+  ImageFilesystemMetadata,
+  MountedImagePartition,
+  MountedPartitionDiscovery,
+} from "./model.js";
 import { assertSafeRoot, readSafeFile } from "./source.js";
 
 export interface ValidatedImageRoots {
-  readonly boot: string;
-  readonly root: string;
+  readonly boot: ValidatedImageRoot;
+  readonly root: ValidatedImageRoot;
 }
+
+export interface ValidatedImageRoot {
+  readonly metadata: ImageFilesystemMetadata;
+  readonly path: string;
+}
+
+const rootIdentity = { gid: 0, uid: 0 } as const;
+
+const exactMetadataContract = (partition: MountedImagePartition): boolean => {
+  if (partition.role === "root") return partition.metadata.kind === "per-entry";
+  return partition.role === "boot" && partition.metadata.kind === "uniform" &&
+    partition.metadata.directoryMode === 0o700 && partition.metadata.fileMode === 0o600 &&
+    partition.metadata.identity.uid === rootIdentity.uid &&
+    partition.metadata.identity.gid === rootIdentity.gid;
+};
 
 const exactPartition = (
   actual: MountedImagePartition,
@@ -15,7 +34,8 @@ const exactPartition = (
 ): boolean =>
   actual.role === expected.role &&
   actual.filesystem === expected.filesystem &&
-  actual.label === expected.label;
+  actual.label === expected.label &&
+  exactMetadataContract(actual);
 
 const parseOsRelease = (contents: Uint8Array): ReadonlyMap<string, string> => {
   const values = new Map<string, string>();
@@ -31,11 +51,11 @@ const parseOsRelease = (contents: Uint8Array): ReadonlyMap<string, string> => {
 
 const assertImageShape = async (roots: ValidatedImageRoots): Promise<void> => {
   const [config, commandLine, osRelease, passwd, group] = await Promise.all([
-    readSafeFile(roots.boot, "config.txt"),
-    readSafeFile(roots.boot, "cmdline.txt"),
-    readSafeFile(roots.root, "usr/lib/os-release"),
-    readSafeFile(roots.root, "etc/passwd"),
-    readSafeFile(roots.root, "etc/group"),
+    readSafeFile(roots.boot.path, "config.txt"),
+    readSafeFile(roots.boot.path, "cmdline.txt"),
+    readSafeFile(roots.root.path, "usr/lib/os-release"),
+    readSafeFile(roots.root.path, "etc/passwd"),
+    readSafeFile(roots.root.path, "etc/group"),
   ]);
   const release = parseOsRelease(osRelease);
   if (
@@ -69,8 +89,8 @@ export const discoverImageRoots = async (
     throw adapterError("incompatible-image", "Image partitions do not provide distinct boot and root mounts.");
   }
   const roots = {
-    boot: await assertSafeRoot(boot.mountPath),
-    root: await assertSafeRoot(root.mountPath),
+    boot: { metadata: boot.metadata, path: await assertSafeRoot(boot.mountPath) },
+    root: { metadata: root.metadata, path: await assertSafeRoot(root.mountPath) },
   };
   await assertImageShape(roots);
   return roots;

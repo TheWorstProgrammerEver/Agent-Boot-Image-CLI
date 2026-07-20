@@ -8,7 +8,7 @@ import type {
 } from "./model.js";
 import { assertNetworkConfig, renderNetworkConfig } from "./network-config.js";
 import { discoverImageRoots } from "./partitions.js";
-import { createRootPlan, validateAccount } from "./plan.js";
+import { createRootPlan, renderProtectedBootFstab, validateAccount } from "./plan.js";
 
 const secretId = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u;
 const rootIdentity = { gid: 0, uid: 0 } as const;
@@ -50,14 +50,24 @@ const validateExistingAccountFiles = (
   group: Uint8Array,
   username: string,
 ): void => {
-  const passwdEntries = Buffer.from(passwd).toString("utf8").trimEnd().split("\n");
-  const groupEntries = Buffer.from(group).toString("utf8").trimEnd().split("\n");
-  const uidEntry = passwdEntries.find((line) => line.split(":")[2] === "1000");
-  const gidEntry = groupEntries.find((line) => line.split(":")[2] === "1000");
+  const passwdEntries = Buffer.from(passwd).toString("utf8").trimEnd().split("\n")
+    .map((line) => line.split(":"));
+  const groupEntries = Buffer.from(group).toString("utf8").trimEnd().split("\n")
+    .map((line) => line.split(":"));
+  const uidEntries = passwdEntries.filter((entry) => entry[2] === "1000");
+  const gidEntries = groupEntries.filter((entry) => entry[2] === "1000");
+  const targetPasswdEntries = passwdEntries.filter((entry) => entry[0] === username);
+  const targetGroupEntries = groupEntries.filter((entry) => entry[0] === username);
+  const uidEntry = uidEntries[0];
+  const gidEntry = gidEntries[0];
+  const acceptedName = uidEntry?.[0];
   if (
-    (uidEntry !== undefined && uidEntry.split(":")[0] !== username) ||
-    (gidEntry !== undefined && gidEntry.split(":")[0] !== username)
-  ) throw adapterError("incompatible-image", "The image first-user identity is already occupied.");
+    uidEntries.length !== 1 || gidEntries.length !== 1 || uidEntry === undefined || gidEntry === undefined ||
+    uidEntry[3] !== "1000" || gidEntry[0] !== acceptedName ||
+    (acceptedName !== "pi" && acceptedName !== username) ||
+    targetPasswdEntries.some((entry) => entry[2] !== "1000" || entry[3] !== "1000") ||
+    targetGroupEntries.some((entry) => entry[2] !== "1000")
+  ) throw adapterError("incompatible-image", "The image first-user identity is incompatible.");
 };
 
 const bootPlan = (
@@ -65,7 +75,7 @@ const bootPlan = (
   networkConfig: Uint8Array | undefined,
 ): readonly ImagePlanEntry[] => [
   { contents: userconf, identity: rootIdentity, kind: "file", mode: 0o600, path: "userconf" },
-  { contents: new Uint8Array(), identity: rootIdentity, kind: "file", mode: 0o644, path: "ssh" },
+  { contents: new Uint8Array(), identity: rootIdentity, kind: "file", mode: 0o600, path: "ssh" },
   ...(networkConfig === undefined ? [] : [{
     contents: networkConfig,
     identity: rootIdentity,
@@ -92,14 +102,16 @@ export const customizeRaspberryPiOsTrixie = async (
   );
   validateAccount(inputs.assembly.documents.manifest, options.account);
   const roots = await discoverImageRoots(options.partitionDiscovery, inputs.osLock);
-  const [bootWriter, rootWriter, passwd, group, hosts] = await Promise.all([
-    SafeImageWriter.create(roots.boot, options.ownership),
-    SafeImageWriter.create(roots.root, options.ownership),
-    readSafeFile(roots.root, "etc/passwd"),
-    readSafeFile(roots.root, "etc/group"),
-    readSafeFile(roots.root, "etc/hosts"),
+  const [bootWriter, rootWriter, passwd, group, hosts, fstab] = await Promise.all([
+    SafeImageWriter.create(roots.boot.path, options.ownership, roots.boot.metadata),
+    SafeImageWriter.create(roots.root.path, options.ownership, roots.root.metadata),
+    readSafeFile(roots.root.path, "etc/passwd"),
+    readSafeFile(roots.root.path, "etc/group"),
+    readSafeFile(roots.root.path, "etc/hosts"),
+    readSafeFile(roots.root.path, "etc/fstab"),
   ]);
   validateExistingAccountFiles(passwd, group, options.account.username);
+  const protectedBootFstab = renderProtectedBootFstab(fstab);
 
   const accountReference = inputs.assembly.documents.manifest.bootstrap.account.initialPassword;
   const existing = existingPasswordHash(await bootWriter.readOptional("userconf"), options.account.username);
@@ -130,16 +142,19 @@ export const customizeRaspberryPiOsTrixie = async (
     secrets,
     network?.hostname,
     hosts,
+    protectedBootFstab,
   );
 
   await Promise.all([bootWriter.preflight(bootEntries), rootWriter.preflight(rootEntries)]);
-  await bootWriter.apply(bootEntries);
   await rootWriter.apply(rootEntries);
+  await bootWriter.apply(bootEntries);
   await Promise.all([bootWriter.verify(bootEntries), rootWriter.verify(rootEntries)]);
   if (wifi !== undefined && networkConfig !== undefined) assertNetworkConfig(networkConfig, wifi);
 
   const assertions = [
     assertion("partition-contract", "/boot/firmware + /"),
+    assertion("bootfs-root-only", "/boot/firmware"),
+    assertion("bootfs-runtime-mount", "/etc/fstab"),
     assertion("account-bootstrap", "/boot/firmware/userconf"),
     assertion("ssh-bootstrap", "/boot/firmware/ssh"),
     ...(wifi === undefined ? [] : [assertion("netplan-v2", "/boot/firmware/network-config")]),
