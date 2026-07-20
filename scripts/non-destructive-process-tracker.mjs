@@ -18,6 +18,7 @@ const readProcessRecord = async entry => {
       processGroupId: Number(fields[2]),
       sessionId: Number(fields[3]),
       startTime: fields[19],
+      state: fields[0],
     };
   } catch {
     // A process may exit between directory enumeration and stat inspection.
@@ -90,7 +91,9 @@ export const liveTrackedProcesses = async tracked => {
   const table = await processSnapshot();
   return tracked.flatMap(record => {
     const current = table.get(record.pid);
-    return current?.startTime === record.startTime ? [current] : [];
+    return current?.startTime === record.startTime && current.state !== "Z"
+      ? [current]
+      : [];
   });
 };
 

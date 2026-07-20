@@ -31,5 +31,6 @@ test("runner detects and removes a descendant reparented after test exit", async
   assert.deepEqual(result, { exitCode: 0, signal: null });
   assert.ok(live.length > 0);
   assert.ok(live.some(record => record.parentPid === 1));
+  assert.ok(live.every(record => record.state !== "Z"));
   assert.deepEqual(cleanupFailures, []);
 });
