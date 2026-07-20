@@ -1,0 +1,7 @@
+PRETTY_NAME="Raspberry Pi OS 13 (trixie)"
+NAME="Raspberry Pi OS"
+VERSION_ID="13"
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie
+ID=raspbian
+ID_LIKE=debian

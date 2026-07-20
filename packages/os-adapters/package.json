@@ -12,10 +12,16 @@
     "./catalog": {
       "types": "./dist/catalog/index.d.ts",
       "default": "./dist/catalog/index.js"
+    },
+    "./raspberry-pi-os-trixie": {
+      "types": "./dist/raspberry-pi-os-trixie/index.d.ts",
+      "default": "./dist/raspberry-pi-os-trixie/index.js"
     }
   },
   "files": ["dist", "fixtures"],
   "dependencies": {
-    "@agent-boot/protocol": "0.0.0"
+    "@agent-boot/process": "0.0.0",
+    "@agent-boot/protocol": "0.0.0",
+    "@agent-boot/runner-bundle": "0.0.0"
   }
 }
