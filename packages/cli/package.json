@@ -16,6 +16,10 @@
       "types": "./dist/images/index.d.ts",
       "default": "./dist/images/index.js"
     },
+    "./image": {
+      "types": "./dist/image/index.d.ts",
+      "default": "./dist/image/index.js"
+    },
     "./imaging": {
       "types": "./dist/imaging/index.d.ts",
       "default": "./dist/imaging/index.js"
@@ -34,6 +38,7 @@
     "@agent-boot/process": "0.0.0",
     "@agent-boot/protocol": "0.0.0",
     "@agent-boot/runner": "0.0.0",
+    "@agent-boot/runner-bundle": "0.0.0",
     "@agent-boot/synth": "0.0.0"
   }
 }

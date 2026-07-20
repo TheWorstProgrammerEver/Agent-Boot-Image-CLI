@@ -35,3 +35,4 @@ export {
 } from "./drives/index.js";
 export * from "./images/index.js";
 export * from "./imaging/index.js";
+export * from "./image/index.js";

@@ -14,6 +14,7 @@
     { "path": "../protocol" },
     { "path": "../os-adapters" },
     { "path": "../os-linux" },
-    { "path": "../runner" }
+    { "path": "../runner" },
+    { "path": "../runner-bundle" }
   ]
 }

@@ -72,7 +72,53 @@ The exported image-target guardrail API requires an explicit by-id target plus
 expected model, serial, removable status, transport, and maximum size. It prints
 a redacted plan before interactive acknowledgement or `--yes`, then resolves
 and rechecks the complete target identity immediately before entering the
-downstream lock callback. This package does not implement unmounting or writes.
+downstream lock callback.
+
+# `create-agent image`
+
+Run the complete guarded image workflow only from a reviewed, trusted definition
+and with an explicitly identified disposable target:
+
+```console
+create-agent image \
+  --definition ./my-agent.ts \
+  --runner-runtime ./runner/node \
+  --runner-entrypoint ./runner/entrypoint.mjs \
+  --runner-bundle ./runner/bundle \
+  --cache-directory ./cache \
+  --lock-directory ./locks \
+  --target /dev/disk/by-id/usb-reviewed-target \
+  --expect-model 'Reviewed USB model' \
+  --expect-serial 'reviewed-serial' \
+  --expect-transport usb \
+  --max-size-bytes 68719476736
+```
+
+The command validates the trusted definition, runner inputs, bundle, immutable
+OS selection, assembly synthesis, and bootstrap secret sources before target
+preflight. It downloads and verifies the pinned OS artifact, prepares a private
+raw-image workspace, prints a redacted plan, and requires acknowledgement before
+entering the lock/recheck/unmount/write/full-read-back transaction. Only a
+verified target proceeds to adapter customization, reverse-order unmount, and
+read-only filesystem checks.
+
+No unstable target shorthand is accepted and there are no guardrail override
+flags. `--yes` suppresses the interactive phrase only; it does not suppress the
+plan or any identity, topology, size, removable-media, or transport guardrail.
+Use `--dry-run` to stop after definition, runner-bundle, OS-lock, and synthesis
+validation. Dry-run does not read secret contents, download artifacts, create a
+workspace, instantiate command/device adapters, inspect a device, or request
+confirmation.
+
+Image-specific failures use exit `9` for preparation, `10` for preflight or
+confirmation, `11` for lock/write/read-back, `12` for customization/checks,
+`13` for cleanup failure, and `130` for cancellation. Diagnostics identify the
+failed phase and whether the target is unchanged, incomplete, verified but not
+customized, or complete. They never include secret contents or target serials.
+
+Routine automated tests use deterministic fakes and regular files only. Do not
+run this command against physical media without a separately approved test whose
+human comment names the exact disposable stable target.
 
 ## Immutable OS artifact cache
 
