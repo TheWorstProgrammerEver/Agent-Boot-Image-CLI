@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 import { URL } from "node:url";
 
@@ -19,6 +21,11 @@ import {
 } from "@agent-boot/cli";
 import { ImageCustomizationError } from "@agent-boot/cli/customize";
 import { ImageWriteError } from "@agent-boot/cli/imaging";
+import { FakeCommandHost } from "@agent-boot/process";
+import {
+  requestImageTargetAcknowledgement,
+} from "../packages/cli/dist/image/live.js";
+import { XzRawImagePreparer } from "../packages/cli/dist/image/raw-image.js";
 import { createDefinitionFixture } from "../test-support/cli-definition-fixtures.mjs";
 import { createAdapterFixture } from "../test-support/raspberry-pi-os-adapter-helpers.mjs";
 
@@ -359,6 +366,80 @@ test("a signal aborts pending artifact acquisition instead of waiting for it to 
   assert.equal(harness.dependencies.signalSource.listenerCount("SIGTERM"), 0);
   assert.deepEqual(harness.secretBytes, Buffer.alloc(harness.secretBytes.length));
   assert.equal(harness.events.includes("workspace"), false);
+});
+
+test("a signal aborts pending interactive confirmation and cleans owned state", async () => {
+  const harness = createHarness();
+  let markStarted;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  harness.dependencies.confirmTarget = async (_plan, _request, _io, cancellation) => {
+    harness.events.push("confirm");
+    markStarted();
+    return await new Promise((_resolve, reject) => {
+      cancellation.addEventListener("abort", () => {
+        reject(new Error("fixture confirmation canceled"));
+      }, { once: true });
+    });
+  };
+
+  const pending = runImageWorkflow(request({ yes: false }), harness.io, harness.dependencies);
+  await started;
+  harness.dependencies.signalSource.emit("SIGINT");
+  await assert.rejects(
+    pending,
+    error => error instanceof ImageWorkflowError && error.canceled,
+  );
+  assert.equal(harness.dependencies.signalSource.listenerCount("SIGINT"), 0);
+  assert.deepEqual(harness.secretBytes, Buffer.alloc(harness.secretBytes.length));
+  assert.equal(harness.events.at(-1), "cleanup");
+  assert.equal(harness.events.includes("lock"), false);
+});
+
+test("the live acknowledgement request rejects promptly when canceled", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const cancellation = new globalThis.AbortController();
+  const pending = requestImageTargetAcknowledgement(
+    "Confirm fixture target",
+    cancellation.signal,
+    input,
+    output,
+  );
+  cancellation.abort();
+  await assert.rejects(pending, /confirmation canceled/u);
+  assert.equal(input.listenerCount("data"), 0);
+});
+
+test("raw-image preparation rejects swapped artifact bytes before spawning xz", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-image-prepare-"));
+  const artifactPath = join(root, "cached.img.xz");
+  const original = Buffer.from("pinned compressed artifact");
+  const substituted = Buffer.from(original);
+  substituted[0] ^= 0xff;
+  const commands = new FakeCommandHost();
+  try {
+    await writeFile(artifactPath, substituted);
+    const preparer = new XzRawImagePreparer(commands);
+    await assert.rejects(
+      preparer.prepare({
+        compressedByteLength: original.length,
+        compressionFormat: "xz",
+        imageByteLength: 4096,
+        imageFormat: "raw",
+        path: artifactPath,
+        sha256: createHash("sha256").update(original).digest("hex"),
+        source: "cache",
+      }, {
+        assemblyDirectory: join(root, "assembly"),
+        path: root,
+        remove: async () => undefined,
+      }, new globalThis.AbortController().signal),
+      /pinned digest/u,
+    );
+    assert.equal(commands.spawnCalls.length, 0);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 });
 
 test("dry-run completes validation and synthesis without reaching any live boundary", async () => {

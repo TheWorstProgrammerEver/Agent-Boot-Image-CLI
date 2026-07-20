@@ -8,6 +8,7 @@ import { NodeSpawnAdapter } from "@agent-boot/process";
 import { verifyRunnerBundle } from "@agent-boot/runner-bundle";
 import { synthesizeAssembly } from "@agent-boot/synth";
 import { createInterface } from "node:readline/promises";
+import type { Readable, Writable } from "node:stream";
 
 import {
   CommandImageFilesystemChecker,
@@ -35,6 +36,25 @@ import { createSystemImageWorkspace } from "./workspace.js";
 
 const unavailable = (): Promise<never> =>
   Promise.reject(new Error("Dry-run crossed a live adapter boundary."));
+
+export const requestImageTargetAcknowledgement = async (
+  prompt: string,
+  cancellation: AbortSignal,
+  input: Readable = process.stdin,
+  output: Writable = process.stdout,
+): Promise<string> => {
+  const readline = createInterface({ input, output });
+  try {
+    return await readline.question(`${prompt} `, { signal: cancellation });
+  } catch (error) {
+    if (cancellation.aborted) {
+      throw new Error("Image target confirmation canceled.", { cause: error });
+    }
+    throw error;
+  } finally {
+    readline.close();
+  }
+};
 
 const commonSafeDependencies = (): Pick<ImageWorkflowDependencies,
   | "loadDefinition"
@@ -82,18 +102,11 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
       cancellation.throwIfAborted();
       return artifact;
     },
-    confirmTarget: async (plan, request, io) => confirmImageTargetPlan(plan, {
+    confirmTarget: async (plan, request, io, cancellation) => confirmImageTargetPlan(plan, {
       acknowledgement: request.yes
         ? { yes: true }
         : {
-            request: async prompt => {
-              const input = createInterface({ input: process.stdin, output: process.stdout });
-              try {
-                return await input.question(`${prompt} `);
-              } finally {
-                input.close();
-              }
-            },
+            request: prompt => requestImageTargetAcknowledgement(prompt, cancellation),
             yes: false,
           },
       writeLine: io.stdout,

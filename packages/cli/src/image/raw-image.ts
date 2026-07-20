@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import type { SpawnHost } from "@agent-boot/process";
@@ -23,11 +25,21 @@ export class XzRawImagePreparer {
   ): Promise<PreparedImageSource> {
     const compressedPath = join(workspace.path, "operating-system.img.xz");
     const rawPath = join(workspace.path, "operating-system.img");
+    const digest = createHash("sha256");
     await pipeline(
       createReadStream(artifact.path),
+      new Transform({
+        transform(chunk: Uint8Array, _encoding, callback) {
+          digest.update(chunk);
+          callback(null, chunk);
+        },
+      }),
       createWriteStream(compressedPath, { flags: "wx", mode: 0o600 }),
       { signal: cancellation },
     );
+    if (digest.digest("hex") !== artifact.sha256) {
+      throw new Error("copied operating-system artifact did not match its pinned digest");
+    }
     const running = this.#commands.spawn({
       arguments: ["--decompress", "--keep", "--", compressedPath],
       cancellation,

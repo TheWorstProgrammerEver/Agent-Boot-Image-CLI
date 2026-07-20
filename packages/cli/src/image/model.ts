@@ -57,6 +57,7 @@ export interface ImageWorkflowDependencies {
     plan: ImageTargetPlan,
     request: ImageCommandRequest,
     io: CommandIo,
+    cancellation: AbortSignal,
   ) => Promise<ConfirmedImageTargetPlan>;
   readonly createWorkspace: () => Promise<ImageWorkspace>;
   readonly customizeImage: (input: {

@@ -126,7 +126,12 @@ export const runImageWorkflow = async (
         dryRun: false,
       });
       activePhase = "confirmation";
-      const confirmedPlan = await dependencies.confirmTarget(targetPlan, request, io);
+      const confirmedPlan = await dependencies.confirmTarget(
+        targetPlan,
+        request,
+        io,
+        cancellation.signal,
+      );
       checkCanceled(cancellation.signal);
 
       activePhase = "lock";
