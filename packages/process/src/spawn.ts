@@ -1,7 +1,14 @@
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { constants as osConstants } from 'node:os';
+import { isatty } from 'node:tty';
 
-import type { RunningCommand, SpawnCommand, SpawnHost, SpawnResult } from './command.js';
+import type {
+  RunningCommand,
+  SpawnCommand,
+  SpawnHost,
+  SpawnResult,
+  TerminalStdio,
+} from './command.js';
 import { validateCommand } from './command.js';
 import { CommandStartError, reasonFromExit } from './errors.js';
 import { processGroupExists, signalProcessGroup, terminateProcessGroup } from './process-group.js';
@@ -18,20 +25,31 @@ export type SpawnProcess = (
   options: SpawnOptions,
 ) => ChildProcess;
 
+export type TerminalInspector = (descriptor: number) => boolean;
+
 export interface NodeSpawnAdapterOptions {
   readonly redactor?: Redactor;
   readonly signalSource?: SignalSource;
   readonly spawnProcess?: SpawnProcess;
+  readonly terminalInspector?: TerminalInspector;
   readonly terminationGraceMs?: number;
 }
 
 const stdioModes = new Set<unknown>(['inherit', 'stream']);
 const lifetimePolicies = new Set<unknown>(['managed', 'detached']);
 
+const isTerminalStdio = (stdio: unknown): stdio is TerminalStdio =>
+  typeof stdio === 'object' && stdio !== null &&
+  'type' in stdio && stdio.type === 'terminal';
+
 const validateSpawnCommand = (command: SpawnCommand): void => {
   validateCommand(command);
-  if (!stdioModes.has(command.stdio)) {
-    throw new TypeError('stdio must be inherit or stream');
+  if (!stdioModes.has(command.stdio) && !isTerminalStdio(command.stdio)) {
+    throw new TypeError('stdio must be inherit, stream, or terminal');
+  }
+  if (isTerminalStdio(command.stdio) &&
+      (!Number.isSafeInteger(command.stdio.descriptor) || command.stdio.descriptor < 0)) {
+    throw new TypeError('terminal stdio descriptor must be a non-negative integer');
   }
   if (!lifetimePolicies.has(command.lifetime.policy)) {
     throw new TypeError('lifetime policy must be managed or detached');
@@ -48,8 +66,8 @@ const validateSpawnCommand = (command: SpawnCommand): void => {
   if (command.lifetime.policy === 'detached' && command.lifetime.unref && command.stdio === 'stream') {
     throw new TypeError('an unref detached command cannot use streamed stdio');
   }
-  if (command.stdin !== undefined && command.stdio === 'inherit') {
-    throw new TypeError('deliberate stdin cannot be combined with inherited stdio');
+  if (command.stdin !== undefined && command.stdio !== 'stream') {
+    throw new TypeError('deliberate stdin requires streamed stdio');
   }
   if (command.forwardSignals?.includes('SIGKILL') === true ||
       command.forwardSignals?.includes('SIGSTOP') === true) {
@@ -94,12 +112,14 @@ export class NodeSpawnAdapter implements SpawnHost {
   readonly #redactor: Redactor;
   readonly #signalSource: SignalSource;
   readonly #spawnProcess: SpawnProcess;
+  readonly #terminalInspector: TerminalInspector;
   readonly #terminationGraceMs: number;
 
   constructor(options: NodeSpawnAdapterOptions = {}) {
     this.#redactor = options.redactor ?? (value => value);
     this.#signalSource = options.signalSource ?? process;
     this.#spawnProcess = options.spawnProcess ?? nodeSpawn;
+    this.#terminalInspector = options.terminalInspector ?? isatty;
     const terminationGraceMs = options.terminationGraceMs ?? 100;
     if (!Number.isSafeInteger(terminationGraceMs) || terminationGraceMs <= 0) {
       throw new RangeError('terminationGraceMs must be a positive integer');
@@ -113,6 +133,10 @@ export class NodeSpawnAdapter implements SpawnHost {
       throw new Error('NodeSpawnAdapter requires a POSIX platform');
     }
     if (isCanceled(command.cancellation)) return completedWithoutSpawn('canceled');
+    if (isTerminalStdio(command.stdio) &&
+        !this.#terminalInspector(command.stdio.descriptor)) {
+      throw new TypeError('terminal stdio descriptor must reference a TTY');
+    }
 
     let child: ChildProcess;
     try {
@@ -121,9 +145,11 @@ export class NodeSpawnAdapter implements SpawnHost {
         detached: true,
         env: environmentFor(command.environment),
         shell: false,
-        stdio: command.stdio === 'inherit'
-          ? 'inherit'
-          : [command.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        stdio: isTerminalStdio(command.stdio)
+          ? [command.stdio.descriptor, command.stdio.descriptor, command.stdio.descriptor]
+          : command.stdio === 'inherit'
+            ? 'inherit'
+            : [command.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });
     } catch (error) {

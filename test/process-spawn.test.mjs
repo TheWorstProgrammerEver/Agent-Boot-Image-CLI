@@ -113,6 +113,52 @@ test('spawn selects inherited TTY mode and explicit detached lifetime', async ()
   assert.equal(unrefCalled, true);
 });
 
+test('spawn duplicates an explicit terminal onto all three child descriptors', async () => {
+  const child = new EventEmitter();
+  let inspectedDescriptor;
+  let spawnOptions;
+  const running = new NodeSpawnAdapter({
+    spawnProcess: (_executable, _arguments, options) => {
+      spawnOptions = options;
+      globalThis.queueMicrotask(() => {
+        child.emit('exit', 0, null);
+        child.emit('close', 0, null);
+      });
+      return child;
+    },
+    terminalInspector: descriptor => {
+      inspectedDescriptor = descriptor;
+      return true;
+    },
+  }).spawn({
+    executable: executableNode,
+    lifetime: { policy: 'detached', unref: false },
+    stdio: { descriptor: 73, type: 'terminal' },
+  });
+
+  assert.equal(inspectedDescriptor, 73);
+  assert.deepEqual(spawnOptions.stdio, [73, 73, 73]);
+  assert.deepEqual(await running.completion, { exitCode: 0, reason: 'exit', signal: null });
+});
+
+test('spawn rejects a terminal descriptor that is not a TTY before launch', () => {
+  let spawnCalls = 0;
+  const adapter = new NodeSpawnAdapter({
+    spawnProcess: () => {
+      spawnCalls += 1;
+      throw new Error('must not spawn');
+    },
+    terminalInspector: () => false,
+  });
+
+  assert.throws(() => adapter.spawn({
+    executable: executableNode,
+    lifetime: { policy: 'managed' },
+    stdio: { descriptor: 0, type: 'terminal' },
+  }), /must reference a TTY/u);
+  assert.equal(spawnCalls, 0);
+});
+
 test('pre-aborted cancellation wins without starting a child', async () => {
   const controller = new globalThis.AbortController();
   controller.abort();

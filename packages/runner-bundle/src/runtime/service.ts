@@ -57,6 +57,7 @@ const run = async (): Promise<"failed" | "succeeded"> => {
 
   const commandHost = new RuntimeCommandHost(
     new NodeSpawnAdapter({ terminationGraceMs: 5_000 }),
+    0,
   );
   const resources = new AssemblyResourceResolver(TARGET_PATHS.immutableRoot, manifest);
   const promptHydrator = new PromptHydrator(

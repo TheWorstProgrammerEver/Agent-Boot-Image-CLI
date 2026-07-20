@@ -8,6 +8,7 @@ import process from "node:process";
 import test from "node:test";
 
 import {
+  RuntimeCommandHost,
   RuntimeSecretResolver,
   bundlePathFor,
   buildRunnerBundle,
@@ -253,6 +254,43 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
   } finally {
     await fixture.cleanup();
   }
+});
+
+test("manual runtime routing isolates all foreground descriptors from journal output", async () => {
+  const manualMarker = "private-manual-device-auth-output";
+  const terminalSink = [];
+  const journalSink = [];
+  let routedStdio;
+  const spawnHost = {
+    spawn: command => {
+      routedStdio = command.stdio;
+      if (typeof command.stdio === "object" && command.stdio.type === "terminal") {
+        terminalSink.push(manualMarker);
+      } else {
+        command.onOutput?.({ data: Buffer.from(manualMarker), stream: "stdout" });
+      }
+      return {
+        cancel: () => undefined,
+        completion: Promise.resolve({ exitCode: 0, reason: "exit", signal: null }),
+        pid: undefined,
+        sendSignal: () => false,
+      };
+    },
+  };
+  const commandHost = new RuntimeCommandHost(spawnHost, 0);
+  const running = commandHost.spawn({
+    executable: "codex",
+    lifetime: { policy: "managed" },
+    onOutput: chunk => journalSink.push(Buffer.from(chunk.data).toString()),
+    stdio: "inherit",
+  });
+  await running.completion;
+  journalSink.push(formatRunnerProgress({ status: "runner-succeeded" }));
+
+  assert.deepEqual(routedStdio, { descriptor: 0, type: "terminal" });
+  assert.deepEqual(terminalSink, [manualMarker]);
+  assert.doesNotMatch(journalSink.join(""), new RegExp(manualMarker, "u"));
+  assert.equal(journalSink.join(""), "agent-boot: status=runner-succeeded\n");
 });
 
 test("progress and secret diagnostics cannot echo undeclared private fields", () => {

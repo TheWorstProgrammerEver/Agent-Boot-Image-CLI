@@ -13,6 +13,7 @@ export {
   type SpawnOutputChunk,
   type SpawnOutputStream,
   type SpawnResult,
+  type TerminalStdio,
 } from './command.js';
 export { CompositeCommandHost } from './composite-command-host.js';
 export { BoundedExecError, CommandStartError, FakeCommandScriptError } from './errors.js';
@@ -21,6 +22,7 @@ export {
   NodeSpawnAdapter,
   type NodeSpawnAdapterOptions,
   type SignalSource,
+  type TerminalInspector,
   type SpawnProcess,
 } from './spawn.js';
 export {

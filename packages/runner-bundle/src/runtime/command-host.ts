@@ -2,20 +2,27 @@ import type {
   BoundedExecCommand,
   BoundedExecResult,
   CommandHost,
-  NodeSpawnAdapter,
   RunningCommand,
   SpawnCommand,
+  SpawnHost,
 } from "@agent-boot/process";
 
 export class RuntimeCommandHost implements CommandHost {
-  readonly #spawnHost: NodeSpawnAdapter;
+  readonly #manualTerminalDescriptor: number;
+  readonly #spawnHost: SpawnHost;
 
-  constructor(spawnHost: NodeSpawnAdapter) {
+  constructor(spawnHost: SpawnHost, manualTerminalDescriptor: number) {
     this.#spawnHost = spawnHost;
+    this.#manualTerminalDescriptor = manualTerminalDescriptor;
   }
 
   spawn(command: SpawnCommand): RunningCommand {
-    return this.#spawnHost.spawn(command);
+    return this.#spawnHost.spawn(command.stdio === "inherit"
+      ? {
+        ...command,
+        stdio: { descriptor: this.#manualTerminalDescriptor, type: "terminal" },
+      }
+      : command);
   }
 
   async exec(command: BoundedExecCommand): Promise<BoundedExecResult> {

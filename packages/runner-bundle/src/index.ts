@@ -17,6 +17,7 @@ export {
   TARGET_PATHS,
 } from "./paths.js";
 export { formatRunnerProgress } from "./runtime/progress.js";
+export { RuntimeCommandHost } from "./runtime/command-host.js";
 export { createCodexProviderAdapter } from "./runtime/codex.js";
 export { RuntimeSecretResolver } from "./runtime/secret-resolver.js";
 export { renderRunnerService } from "./systemd.js";
