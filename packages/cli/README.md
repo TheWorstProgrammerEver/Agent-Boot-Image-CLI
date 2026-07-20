@@ -87,3 +87,17 @@ replacement, while checksum-mismatched downloads are discarded. Per-digest locks
 concurrent writers, and the final rename is atomic. The returned metadata distinguishes the XZ
 container from the raw image and includes both compressed and decompressed byte lengths for later
 device guardrails and streaming writers.
+
+## Image customization transaction
+
+The `@agent-boot/cli/customize` API handles the isolated post-write customization boundary; the
+public end-to-end `image` command remains separate. It waits for an exact partition layout from the
+immutable OS lock, creates mounts only beneath a private `0700` temporary root, and delegates every
+assembly and bootstrap-secret write to the selected OS adapter. The Raspberry Pi adapter is mounted
+with uniform root-only FAT permissions and per-entry ext4 permissions.
+
+Every completed mount is unmounted in reverse order on success, failure, cancellation, or
+`SIGHUP`/`SIGINT`/`SIGTERM`. Only after all mounts are gone does the transaction run `fsck.vfat -n`
+and `e2fsck -f -n`; both read-only checks and the adapter postconditions must pass before success.
+Routine tests inject partition, mount, ownership, adapter, and filesystem-check fakes and never
+invoke a real device or privileged command.

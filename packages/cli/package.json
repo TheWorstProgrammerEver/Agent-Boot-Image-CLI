@@ -19,6 +19,10 @@
     "./imaging": {
       "types": "./dist/imaging/index.d.ts",
       "default": "./dist/imaging/index.js"
+    },
+    "./customize": {
+      "types": "./dist/customize/index.d.ts",
+      "default": "./dist/customize/index.js"
     }
   },
   "files": ["dist", "README.md"],
