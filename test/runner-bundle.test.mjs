@@ -120,7 +120,11 @@ test("runner bundles are reproducible, target-addressable, and mode separated", 
     assert.equal(entries.get("/etc/systemd/system/agent-boot-runner.service").mode, "0644");
     assert.equal(entries.get("/etc/agent-boot").mode, "0750");
     assert.equal(entries.get("/etc/agent-boot/bootstrap-secrets").mode, "0700");
+    assert.equal(entries.get("/var").mode, "0755");
+    assert.equal(entries.get("/var/lib").mode, "0755");
     assert.equal(entries.get("/var/lib/agent-boot").mode, "0700");
+    assert.equal(entries.get("/run").mode, "0755");
+    assert.equal(entries.get("/run/agent-boot").mode, "0700");
     assert.equal(entries.get("/run/agent-boot/prompts").mode, "0700");
     assert.equal(entries.get("/run/agent-boot/secrets").mode, "0700");
     assert.equal(entries.get("/opt/agent-boot/runtime/bin/npm").linkTarget, "../lib/npm.js");

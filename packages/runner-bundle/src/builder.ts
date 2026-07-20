@@ -73,6 +73,9 @@ const prepareTargetDirectories = async (root: string): Promise<void> => {
     "/etc",
     "/etc/systemd",
     "/etc/systemd/system",
+    "/var",
+    "/var/lib",
+    "/run",
   ];
   const privateDirectories = [
     "/etc/agent-boot/bootstrap-secrets",
