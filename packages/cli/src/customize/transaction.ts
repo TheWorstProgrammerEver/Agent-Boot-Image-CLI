@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import { RaspberryPiOsCapacityError } from "@agent-boot/os-adapters";
+
 import {
   customizationError,
   ImageCustomizationError,
@@ -101,32 +103,50 @@ export const customizeWrittenImage = async (
     }
   };
 
+  const discoverPartitions = (): Promise<readonly ValidatedImagePartition[]> => waitForImagePartitions({
+    cancellation: cancellation.signal,
+    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+    inspector: dependencies.partitionInspector,
+    osLock,
+    ...(dependencies.partitionPollIntervalMs === undefined
+      ? {}
+      : { pollIntervalMs: dependencies.partitionPollIntervalMs }),
+    targetPath: request.targetPath,
+    ...(dependencies.partitionTimeoutMs === undefined
+      ? {}
+      : { timeoutMs: dependencies.partitionTimeoutMs }),
+  });
+
+  const mountPartitions = async (
+    partitions: readonly ValidatedImagePartition[],
+  ): Promise<void> => {
+    if (mountRoot === undefined) {
+      mountRoot = await (dependencies.mountRootFactory ?? new SystemPrivateMountRootFactory()).create();
+    }
+    for (const partition of partitions) {
+      const mountPath = mountPathFor(mountRoot.path, partition);
+      await mkdir(mountPath, { mode: 0o700, recursive: true });
+      // A mount may take effect before its command reports failure or cancellation.
+      mountsRequiringCleanup.push({ ...partition, mountPath });
+      await dependencies.mountHost.mount(partition, mountPath, cancellation.signal);
+      if (isCanceled()) throw customizationError("canceled");
+    }
+  };
+
+  const customizeMounted = async () => dependencies.adapter.customize({
+    assemblyDirectory: request.assemblyDirectory,
+    bootstrapSecrets: request.bootstrapSecrets,
+    mountedPartitions: mountsRequiringCleanup,
+    osLock,
+    runnerBundleDirectory: request.runnerBundleDirectory,
+  }, cancellation.signal);
+
   try {
-    const partitions = await waitForImagePartitions({
-      cancellation: cancellation.signal,
-      ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
-      inspector: dependencies.partitionInspector,
-      osLock,
-      ...(dependencies.partitionPollIntervalMs === undefined
-        ? {}
-        : { pollIntervalMs: dependencies.partitionPollIntervalMs }),
-      targetPath: request.targetPath,
-      ...(dependencies.partitionTimeoutMs === undefined
-        ? {}
-        : { timeoutMs: dependencies.partitionTimeoutMs }),
-    });
+    let partitions = await discoverPartitions();
     if (isCanceled()) throw customizationError("canceled");
 
     try {
-      mountRoot = await (dependencies.mountRootFactory ?? new SystemPrivateMountRootFactory()).create();
-      for (const partition of partitions) {
-        const mountPath = mountPathFor(mountRoot.path, partition);
-        await mkdir(mountPath, { mode: 0o700, recursive: true });
-        // A mount may take effect before its command reports failure or cancellation.
-        mountsRequiringCleanup.push({ ...partition, mountPath });
-        await dependencies.mountHost.mount(partition, mountPath, cancellation.signal);
-        if (isCanceled()) throw customizationError("canceled");
-      }
+      await mountPartitions(partitions);
     } catch (error) {
       if (error instanceof ImageCustomizationError) throw error;
       throw sanitizedError("mount-failed", cancellation.signal);
@@ -134,15 +154,45 @@ export const customizeWrittenImage = async (
 
     let adapterResult;
     try {
-      adapterResult = await dependencies.adapter.customize({
-        assemblyDirectory: request.assemblyDirectory,
-        bootstrapSecrets: request.bootstrapSecrets,
-        mountedPartitions: mountsRequiringCleanup,
-        osLock,
-        runnerBundleDirectory: request.runnerBundleDirectory,
-      }, cancellation.signal);
-    } catch {
-      throw sanitizedError("adapter-failed", cancellation.signal);
+      adapterResult = await customizeMounted();
+    } catch (error) {
+      if (!(error instanceof RaspberryPiOsCapacityError)) {
+        throw sanitizedError("adapter-failed", cancellation.signal);
+      }
+      if (error.role !== "root" || dependencies.capacityProvisioner === undefined) {
+        throw sanitizedError("capacity-insufficient", cancellation.signal);
+      }
+      const rootPartition = partitions.find(partition => partition.role === "root");
+      if (rootPartition === undefined) throw customizationError("partition-layout");
+      await unmountAll();
+      if (cleanupErrorCount > 0) throw cleanupFailure(undefined, cleanupErrorCount);
+      if (isCanceled()) throw customizationError("canceled");
+      try {
+        await dependencies.capacityProvisioner.provision({
+          requiredAdditionalBytes: error.details.requiredAdditionalBytes,
+          rootPartition,
+          targetPath: request.targetPath,
+        }, cancellation.signal);
+      } catch (provisionError) {
+        if (provisionError instanceof ImageCustomizationError) throw provisionError;
+        throw sanitizedError("capacity-provision-failed", cancellation.signal);
+      }
+      partitions = await discoverPartitions();
+      if (isCanceled()) throw customizationError("canceled");
+      try {
+        await mountPartitions(partitions);
+      } catch (mountError) {
+        if (mountError instanceof ImageCustomizationError) throw mountError;
+        throw sanitizedError("mount-failed", cancellation.signal);
+      }
+      try {
+        adapterResult = await customizeMounted();
+      } catch (retryError) {
+        if (retryError instanceof RaspberryPiOsCapacityError) {
+          throw sanitizedError("capacity-insufficient", cancellation.signal);
+        }
+        throw sanitizedError("adapter-failed", cancellation.signal);
+      }
     }
     if (isCanceled()) throw customizationError("canceled");
     assertAdapterPostconditions(adapterResult);

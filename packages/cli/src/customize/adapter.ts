@@ -1,6 +1,7 @@
 import {
   customizeRaspberryPiOsTrixie,
   type ImageOwnership,
+  type MountedFilesystemCapacityInspector,
   type PasswordHasher,
   type RaspberryPiAccount,
   type RaspberryPiOsCustomizationResult,
@@ -13,6 +14,7 @@ import type {
 
 export interface RaspberryPiOsTrixieCustomizationAdapterOptions {
   readonly account: RaspberryPiAccount;
+  readonly capacityInspector?: MountedFilesystemCapacityInspector;
   readonly ownership: ImageOwnership;
   readonly passwordHasher?: PasswordHasher;
 }

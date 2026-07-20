@@ -9,6 +9,10 @@ import type {
 import { assertNetworkConfig, renderNetworkConfig } from "./network-config.js";
 import { discoverImageRoots } from "./partitions.js";
 import { createRootPlan, renderProtectedBootFstab, validateAccount } from "./plan.js";
+import {
+  SystemMountedFilesystemCapacityInspector,
+  preflightImagePlanCapacity,
+} from "./capacity.js";
 
 const secretId = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u;
 const rootIdentity = { gid: 0, uid: 0 } as const;
@@ -146,6 +150,9 @@ export const customizeRaspberryPiOsTrixie = async (
   );
 
   await Promise.all([bootWriter.preflight(bootEntries), rootWriter.preflight(rootEntries)]);
+  const capacityInspector = options.capacityInspector ?? new SystemMountedFilesystemCapacityInspector();
+  await preflightImagePlanCapacity("boot", roots.boot.path, bootEntries, capacityInspector);
+  await preflightImagePlanCapacity("root", roots.root.path, rootEntries, capacityInspector);
   await rootWriter.apply(rootEntries);
   await bootWriter.apply(bootEntries);
   await Promise.all([bootWriter.verify(bootEntries), rootWriter.verify(rootEntries)]);

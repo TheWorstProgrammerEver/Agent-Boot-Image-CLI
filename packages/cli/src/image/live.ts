@@ -12,6 +12,7 @@ import type { Readable, Writable } from "node:stream";
 
 import {
   CommandImageFilesystemChecker,
+  CommandImageCapacityProvisioner,
   CommandImageMountHost,
   CommandImagePartitionInspector,
   RaspberryPiOsTrixieCustomizationAdapter,
@@ -134,6 +135,7 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
           ownership: new PosixImageOwnership(),
           passwordHasher: new OpenSslPasswordHasher({ commandHost: commands }),
         }),
+        capacityProvisioner: new CommandImageCapacityProvisioner(commands),
         filesystemChecker: new CommandImageFilesystemChecker(commands),
         mountHost: new CommandImageMountHost(commands),
         partitionInspector: new CommandImagePartitionInspector(commands),

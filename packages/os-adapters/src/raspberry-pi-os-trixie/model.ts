@@ -32,6 +32,22 @@ export interface ImageOwnership {
   set(path: string, identity: ImageIdentity, symbolicLink?: boolean): Promise<void>;
 }
 
+export interface ImagePlanCapacity {
+  readonly requiredBlocks: bigint;
+  readonly requiredInodes: bigint;
+}
+
+export interface MountedFilesystemCapacity {
+  readonly availableBlocks: bigint;
+  readonly blockSize: bigint;
+  readonly freeInodes: bigint;
+  readonly totalInodes: bigint;
+}
+
+export interface MountedFilesystemCapacityInspector {
+  inspect(path: string): Promise<MountedFilesystemCapacity>;
+}
+
 export interface RaspberryPiAccount extends RunnerServiceAccount, ImageIdentity {}
 
 export interface PasswordHasher {
@@ -48,6 +64,7 @@ export interface RaspberryPiOsCustomizationOptions {
   readonly account: RaspberryPiAccount;
   readonly assemblyDirectory: string;
   readonly bootstrapSecrets: ReadonlyMap<string, Uint8Array>;
+  readonly capacityInspector?: MountedFilesystemCapacityInspector;
   readonly osLock: unknown;
   readonly ownership: ImageOwnership;
   readonly partitionDiscovery: MountedPartitionDiscovery;
