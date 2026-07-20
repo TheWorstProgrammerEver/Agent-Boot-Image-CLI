@@ -22,9 +22,12 @@ this boundary while continuing to emit the existing `@agent-boot/protocol` OS lo
 ## Raspberry Pi OS Trixie customization
 
 `@agent-boot/os-adapters/raspberry-pi-os-trixie` accepts already-mounted partition roots through a
-small discovery interface. It validates the exact curated `bootfs`/`rootfs` shape and Trixie release
-markers before writing. Mounting, image orchestration, and real-device selection remain outside the
-adapter.
+small discovery interface. It first validates the complete immutable catalog lock, including the
+pinned archive digest, then validates the mounted `bootfs`/`rootfs` shape before writing. The exact
+2026-06-18 artifact reports `ID=debian`, `VERSION_ID=13`, and `VERSION_CODENAME=trixie`; Raspberry
+Pi provenance is established independently by the exact dated `/etc/rpi-issue` marker plus Pi 5
+device-tree, kernel, config, and command-line markers on `bootfs`. Mounting, image orchestration, and
+real-device selection remain outside the adapter.
 
 The adapter verifies the assembly and private ARM64 runner bundle, then installs their immutable
 assets, target placements, plan, manifest, bootstrap-secret inputs, account-owned state paths, and

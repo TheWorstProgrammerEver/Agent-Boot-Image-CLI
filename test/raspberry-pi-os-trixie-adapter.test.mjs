@@ -30,7 +30,7 @@ import {
 
 const mode = async path => (await stat(path)).mode & 0o777;
 
-test("customizes the golden Trixie roots and is byte-stable on repeat", async () => {
+test("customizes the pinned official Trixie identity fixture and is byte-stable on repeat", async () => {
   const fixture = await createAdapterFixture();
   try {
     const password = passwordHasher(2);
@@ -172,12 +172,93 @@ test("rejects partition label and shape drift before modifying either root", asy
   });
 });
 
-test("rejects incompatible release markers and occupied first-user identities", async t => {
+test("rejects independent release-marker and Raspberry Pi boot/root shape drift", async t => {
   for (const [name, mutate] of [
-    ["wrong release", fixture => writeFile(
+    ["distribution ID", fixture => writeFile(
       join(fixture.systemRoot, "usr/lib/os-release"),
-      "ID=raspbian\nVERSION_ID=12\nVERSION_CODENAME=bookworm\n",
+      "ID=raspbian\nVERSION_ID=13\nVERSION_CODENAME=trixie\n",
     )],
+    ["release version", fixture => writeFile(
+      join(fixture.systemRoot, "usr/lib/os-release"),
+      "ID=debian\nVERSION_ID=12\nVERSION_CODENAME=trixie\n",
+    )],
+    ["release codename", fixture => writeFile(
+      join(fixture.systemRoot, "usr/lib/os-release"),
+      "ID=debian\nVERSION_ID=13\nVERSION_CODENAME=bookworm\n",
+    )],
+    ["Raspberry Pi root marker", fixture => writeFile(
+      join(fixture.systemRoot, "etc/rpi-issue"),
+      "Debian generic image\n",
+    )],
+    ["Pi 5 boot config", fixture => writeFile(
+      join(fixture.boot, "config.txt"),
+      "arm_64bit=1\n[all]\n",
+    )],
+    ["Pi boot command line", fixture => writeFile(
+      join(fixture.boot, "cmdline.txt"),
+      "console=serial0,115200 rootfstype=ext4 rootwait\n",
+    )],
+    ["Pi 5 device tree", fixture => writeFile(
+      join(fixture.boot, "bcm2712-rpi-5-b.dtb"),
+      "",
+    )],
+    ["Pi 5 kernel", fixture => writeFile(
+      join(fixture.boot, "kernel_2712.img"),
+      "",
+    )],
+  ]) await t.test(name, async () => {
+    const fixture = await createAdapterFixture();
+    try {
+      await mutate(fixture);
+      const password = passwordHasher();
+      await assert.rejects(
+        customizeRaspberryPiOsTrixie(fixture.options({ passwordHasher: password.hasher })),
+        error => error instanceof RaspberryPiOsAdapterError &&
+          error.code === "incompatible-image" &&
+          error.message === "The mounted root is not Raspberry Pi OS Trixie Lite.",
+      );
+      await assert.rejects(readFile(join(fixture.boot, "userconf")));
+      assert.equal(password.commands.spawnCalls.length, 0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+});
+
+test("rejects curated lock provenance drift before discovery", async t => {
+  for (const [name, mutate] of [
+    ["artifact digest", lock => {
+      lock.artifact.sha256 = "b".repeat(64);
+    }],
+    ["catalog identity", lock => {
+      lock.catalogId = "raspberry-pi-os-lite-trixie-arm64-2026-06-19";
+    }],
+  ]) await t.test(name, async () => {
+    const fixture = await createAdapterFixture();
+    try {
+      const lock = JSON.parse(JSON.stringify(fixture.osLock));
+      mutate(lock);
+      const discovery = new FakePartitionDiscovery(fixture.partitions);
+      await assert.rejects(
+        customizeRaspberryPiOsTrixie(fixture.options({
+          osLock: lock,
+          partitionDiscovery: discovery,
+        })),
+        error => error instanceof RaspberryPiOsAdapterError &&
+          error.code === "incompatible-image" &&
+          error.message === "The OS lock is not the curated Trixie image contract." &&
+          !error.message.includes(lock.artifact.sha256),
+      );
+      assert.equal(discovery.calls, 0);
+      await assert.rejects(readFile(join(fixture.boot, "userconf")));
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+});
+
+test("rejects occupied first-user identities", async t => {
+  for (const [name, mutate] of [
     ["occupied uid", fixture => writeFile(
       join(fixture.systemRoot, "etc/passwd"),
       "root:x:0:0:root:/root:/bin/bash\nother:x:1000:1000::/home/other:/bin/bash\n",

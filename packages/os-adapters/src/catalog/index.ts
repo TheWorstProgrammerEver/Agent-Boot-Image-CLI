@@ -13,4 +13,5 @@ export {
   type OsCatalogEntry,
 } from "./schema.js";
 export { type OsCatalogSelection } from "./selection.js";
+export { RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY } from "./raspberry-pi-os.js";
 export const osCatalog = createOsCatalog([RASPBERRY_PI_OS_LITE_TRIXIE_ARM64]);
