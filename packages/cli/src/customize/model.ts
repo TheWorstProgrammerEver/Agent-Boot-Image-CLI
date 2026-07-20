@@ -1,6 +1,6 @@
 import type { SignalSource } from "@agent-boot/process";
 import type { OsLock } from "@agent-boot/protocol";
-import type { RaspberryPiOsCustomizationResult } from "@agent-boot/os-adapters/raspberry-pi-os-trixie";
+import type { RaspberryPiOsCustomizationResult } from "@agent-boot/os-adapters";
 
 export interface InspectedImagePartition {
   readonly devicePath: string;

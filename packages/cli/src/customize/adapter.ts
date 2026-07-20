@@ -4,7 +4,7 @@ import {
   type PasswordHasher,
   type RaspberryPiAccount,
   type RaspberryPiOsCustomizationResult,
-} from "@agent-boot/os-adapters/raspberry-pi-os-trixie";
+} from "@agent-boot/os-adapters";
 
 import type {
   ImageCustomizationAdapter,
