@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -9,12 +9,14 @@ import {
   terminateTrackedProcesses,
   waitForTrackedProcessesToExit,
 } from "./non-destructive-process-tracker.mjs";
+import { writeFailureDiagnostic } from "./non-destructive-failure-diagnostic.mjs";
 
 const artifactDirectory = join(".artifacts", "non-destructive");
 const accessGuardPath = "scripts/non-destructive-access-guard.mjs";
 const testPaths = [
   "test/integration/non-destructive/device-access-regressions.test.mjs",
   "test/integration/non-destructive/end-to-end.test.mjs",
+  "test/integration/non-destructive/failure-diagnostic-regressions.test.mjs",
   "test/integration/non-destructive/process-cleanup-regressions.test.mjs",
 ];
 
@@ -51,18 +53,13 @@ const passed = result.exitCode === 0 && result.signal === null &&
   newTempRoots.length === 0 && liveDescendants.length === 0;
 
 if (!passed) {
-  await mkdir(artifactDirectory, { recursive: true });
-  await writeFile(join(artifactDirectory, "diagnostic.json"), `${JSON.stringify({
-    command: "node --import <access-guard> --test <integration-suite>",
-    descendantCleanupFailureCount: descendantCleanupFailures.length,
-    exitCode: result.exitCode ?? null,
-    launchError: result.error ?? null,
-    newDescendantProcessCount: liveDescendants.length,
+  await writeFailureDiagnostic({
+    artifactDirectory,
+    descendantCleanupFailures,
+    liveDescendants,
     newTemporaryRoots: newTempRoots,
+    result,
     safeMode: process.env.AGENT_BOOT_CI_SAFE_MODE === "1",
-    schemaVersion: 1,
-    signal: result.signal ?? null,
-    status: "failed",
-  }, null, 2)}\n`, { mode: 0o600 });
+  });
   process.exitCode = result.exitCode === 0 ? 1 : (result.exitCode ?? 1);
 }
