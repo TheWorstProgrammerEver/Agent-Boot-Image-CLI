@@ -9,6 +9,31 @@ permissions:
   contents: read
 
 jobs:
+  non-destructive-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: node:24-bookworm
+      options: --user 1001:122 --cap-drop=ALL --security-opt=no-new-privileges
+    env:
+      AGENT_BOOT_CI_SAFE_MODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build workspace from clean checkout
+        run: npm run build
+      - name: Run non-destructive assembly integration
+        run: npm run test:non-destructive
+      - name: Publish safe failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: non-destructive-integration-diagnostics
+          path: .artifacts/non-destructive
+          if-no-files-found: ignore
+          retention-days: 7
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
