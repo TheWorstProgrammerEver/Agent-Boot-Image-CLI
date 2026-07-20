@@ -4,7 +4,8 @@ Date: 2026-07-20
 
 Issue: [RYA-146 - Run approved physical image and first-boot validation](https://linear.app/ryan-hayward/issue/RYA-146/agent-boot-run-approved-physical-image-and-first-boot-validation)
 
-Result: **blocked during customization; first boot was not attempted.**
+Result: **blocked after two safe customization failures; first boot was not
+attempted.**
 
 This record deliberately omits credentials, the approved target's unique
 by-id value and serial, the network identity, the local operation path, and
@@ -15,10 +16,13 @@ comment attached to RYA-146.
 
 - Refreshed RYA-146, its comments, and dependency relations immediately before
   preparation and again at the destructive boundary.
-- Confirmed RYA-143 and RYA-145 were `Done` at both refreshes.
+- Confirmed RYA-143 and RYA-145 were `Done` before the first attempt. Confirmed
+  RYA-143, RYA-145, and the first-attempt blocker RYA-184 were `Done` before the
+  approved rerun.
 - Confirmed the human comment named the exact whole-disk stable by-id target and
   explicitly declared that device disposable.
-- Used repository commit `0d01ac6` from `main`.
+- The first attempt used repository commit `0d01ac6` from `main`. The rerun used
+  product baseline `120197b` from `main`, after the RYA-184 correction merged.
 - Kept the trusted deployment definition, Wi-Fi input, disposable initial
   password, one-time transaction marker, raw transcripts, cache, and recovery
   files in a mode-`0700` host-local operation tree. Secret files were mode
@@ -36,15 +40,16 @@ npm ci --ignore-scripts
 npm run check
 npm test
 
-tests 382
-pass 382
+tests 393
+pass 393
 fail 0
 ```
 
-The ARM64 runner bundle was built from the checksum-verified Node distribution,
-then verified independently through `verifyRunnerBundle()`. The complete image
-command also passed `--dry-run`; dry-run reported that it accessed no secrets,
-downloads, commands, devices, or output directories.
+Before the rerun, the ARM64 runner bundle was freshly rebuilt from the
+checksum-verified Node distribution, then verified independently through
+`verifyRunnerBundle()`. The complete image command also passed `--dry-run`;
+dry-run reported that it accessed no secrets, downloads, commands, devices, or
+output directories.
 
 | Artifact | Verified identity |
 | --- | --- |
@@ -80,10 +85,10 @@ The live CLI printed the redacted plan before acknowledgment and independently
 confirmed model, serial, transport, removable state, size, active-root ancestry,
 and mounted-descendant checks.
 
-## Imaging result
+## Imaging attempts
 
-The guarded live command ran in an inspectable detached systemd unit with a
-separate state file and redacted transcript. It:
+Both guarded live commands ran in inspectable detached systemd units with a
+separate state file and redacted transcript. Each:
 
 1. loaded and validated the trusted definition;
 2. resolved the immutable curated OS lock;
@@ -96,7 +101,13 @@ separate state file and redacted transcript. It:
 9. wrote exactly `2,977,955,840` raw image bytes; and
 10. completed full byte-for-byte read-back before entering customization.
 
-The command then returned exit `12` with this bounded terminal result:
+The first attempt returned exit `12` because the adapter expected
+`ID=raspbian`, while the pinned official image identifies itself as Debian
+Trixie. RYA-184 corrected that contract and passed independent loop-image
+validation before it merged.
+
+The approved rerun repeated the entire transaction from the reviewed product
+baseline and again returned exit `12` with this bounded terminal result:
 
 ```text
 Image failed during customize; recovery state: target-verified-needs-customization.
@@ -106,7 +117,7 @@ That recovery state is reached only after full read-back verification succeeds.
 The workflow removed its private workspace, wiped its in-memory secret buffers,
 released the device lock, and left the target unmounted.
 
-## Preserved failure state
+## Preserved rerun failure state
 
 Post-failure topology showed the expected raw image partition table and no
 mounted descendants:
@@ -123,23 +134,23 @@ fsck.vfat -n: exit 0
 e2fsck -f -n: exit 0
 ```
 
-A read-only inspection proved customization stopped before its first write:
+A read-only inspection proved the rerun stopped in a partial customization
+state. The private runtime, service file, manifest, plan, one of three bootstrap
+secret source files, and network configuration were present. Service enablement,
+account bootstrap, the SSH marker, the other two secret source files, and prompt
+output were absent. No secret contents were read. The root filesystem reported
+zero generally available bytes, and all inspection mounts were subsequently
+unmounted.
 
-- `/etc/agent-boot` was absent;
-- the private runner service was absent and not enabled;
-- `userconf`, `network-config`, and the SSH marker were absent from `bootfs`;
-- the source image still had its expected UID/GID 1000 `pi` placeholder; and
-- all inspection mounts were subsequently unmounted.
+No first boot was attempted because the media is internally inconsistent and
+does not satisfy the adapter's final postconditions.
 
-No first boot was attempted because the media contains only the verified base
-OS, not the required account, network, private runner, or service customization.
+## Root cause reproductions
 
-## Root cause reproduction
-
-To preserve the physical recovery state, diagnosis used a fresh decompressed
-regular-file copy attached through a loop device. The same assembly, secrets,
-OS lock, and verified runner bundle reproduced the failure before any adapter
-write and exposed the underlying bounded error:
+To preserve the physical recovery state after the first attempt, diagnosis used
+a fresh decompressed regular-file copy attached through a loop device. The same
+assembly, secrets, OS lock, and verified runner bundle reproduced the identity
+failure before any adapter write:
 
 ```text
 RaspberryPiOsAdapterError
@@ -155,13 +166,30 @@ VERSION_ID=13
 VERSION_CODENAME=trixie
 ```
 
-The adapter currently requires `ID=raspbian`. Its curated catalog therefore
-pins an official image that its own mounted-root identity check rejects.
-
 Follow-up [RYA-184 - Align Trixie release identity with the pinned official image](https://linear.app/ryan-hayward/issue/RYA-184/agent-boot-align-trixie-release-identity-with-the-pinned-official)
-owns the focused product and fixture correction. RYA-146 must remain blocked on
-that issue; the preserved physical target must not be retried or booted as a
-completed Agent Boot image in its current state.
+corrected that mismatch.
+
+After the rerun, another fresh regular-file copy was decompressed from the
+checksum-verified artifact, a fresh assembly was synthesized, and the corrected
+adapter was invoked through a loop device. It independently failed with:
+
+```text
+Error
+code: ENOSPC
+message: ENOSPC: no space left on device, write
+```
+
+The pinned root filesystem has 593,920 4 KiB blocks, of which 80,860 were free
+before customization. The verified runner bundle contains 5,911 entries and
+uses about 211 MB of allocated source storage before filesystem metadata and the
+rest of the customization plan. The failed physical root retained only 4,097
+free blocks, all reserved from ordinary use, after the partial write.
+
+Follow-up [RYA-186 - Provision and preflight filesystem capacity before customization](https://linear.app/ryan-hayward/issue/RYA-186/agent-boot-provision-and-preflight-filesystem-capacity-before)
+owns the product correction. It requires complete cross-root capacity preflight
+before mutation and safe root-capacity provisioning on larger targets. RYA-146
+must remain blocked on RYA-186; the preserved target must not be booted or
+retried in its current state.
 
 ## First-boot validation matrix
 
@@ -179,8 +207,8 @@ did not complete:
 | Prompt execution | Not run |
 | Secret transaction cleanup | Not run |
 | Interruption and reboot recovery | Not run |
-| Final health/failure observability | Imaging failure observed; boot health not run |
+| Final health/failure observability | Both imaging failures were bounded and inspectable; boot health not run |
 
-After RYA-184 is resolved, resume RYA-146 by refreshing the exact approval and
+After RYA-186 is resolved, resume RYA-146 by refreshing the exact approval and
 dependencies, rebuilding all artifacts from reviewed `main`, repeating the
 entire guarded image transaction, and then executing the first-boot matrix.
