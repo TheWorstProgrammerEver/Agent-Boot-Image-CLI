@@ -49,7 +49,7 @@ test("environment changes persist across children and resume from immutable plan
       assert.equal(call.environment.HOME, "/home/my-user");
       assert.equal(call.environment.PATH, "/opt/agent/bin:/usr/bin");
       assert.deepEqual(call.lifetime, { policy: "managed" });
-      assert.equal(call.stdio, "inherit");
+      assert.equal(call.stdio, "stream");
       assert.equal(call.timeoutMs, 60_000);
     }
     assert.equal(host.spawnCalls[0].environment.AGENT_NAME, marker);

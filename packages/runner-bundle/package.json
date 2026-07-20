@@ -1,0 +1,23 @@
+{
+  "name": "@agent-boot/runner-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private ARM64 Node runtime and systemd bundle for the on-image runner.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/service.d.ts",
+      "default": "./dist/runtime/service.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "dependencies": {
+    "@agent-boot/process": "0.0.0",
+    "@agent-boot/protocol": "0.0.0",
+    "@agent-boot/runner": "0.0.0"
+  }
+}

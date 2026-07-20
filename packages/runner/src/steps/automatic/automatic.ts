@@ -45,7 +45,7 @@ export class AutomaticStepExecutor {
         executable: step.command.executable,
         label: `runner step ${step.id}`,
         lifetime: { policy: "managed" },
-        stdio: "inherit",
+        stdio: "stream",
         timeoutMs: this.#policy.timeoutMs,
       });
       const result = await running.completion;

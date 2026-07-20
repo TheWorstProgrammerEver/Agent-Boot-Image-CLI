@@ -174,6 +174,7 @@ test("accepted processes record stable metadata and stop at runner completion", 
 
     assert.equal(result.status, "succeeded");
     assert.deepEqual(host.spawnCalls[0].lifetime, { policy: "managed" });
+    assert.equal(host.spawnCalls[0].stdio, "stream");
     assert.equal(host.spawnCalls[0].forwardSignals, undefined);
     assert.deepEqual(host.spawnCalls[0].control.cancelSignals, ["SIGTERM"]);
     assert.deepEqual(process.identity, {

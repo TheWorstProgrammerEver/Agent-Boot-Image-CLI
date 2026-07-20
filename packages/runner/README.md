@@ -8,9 +8,10 @@ partial run.
 
 The engine snapshots its configured account home, default working directory, and base `PATH`.
 Completed environment set/unset operations are deterministically replayed from the immutable plan
-when forming each separately spawned child environment. Automatic commands use managed foreground
-processes, checkpoint only after exit code zero, and obey explicit maximum-attempt and timeout
-bounds. Recovery treats a persisted `started` automatic attempt as ambiguous in-flight work: it
+when forming each separately spawned child environment. Automatic commands use managed processes,
+drain and discard normal output so it cannot leak through the console or journal, checkpoint only
+after exit code zero, and obey explicit maximum-attempt and timeout bounds. Recovery treats a
+persisted `started` automatic attempt as ambiguous in-flight work: it
 durably consumes that attempt without spawning again, then either advances to the next numbered
 attempt or requires manual intervention at the bound. Progress and terminal failures contain only
 step identity, attempt, exit status, signal, and recovery action; command output, arguments, and
@@ -60,7 +61,8 @@ The private `agent-boot-codex` executable implements the serialized version and
 profile commands emitted by the definition package. It exposes no secret
 arguments and reduces failures to the installation/configuration gate boundary.
 
-Fire-and-forget launch is accepted only after the managed child leads an isolated process group,
+Fire-and-forget output is likewise drained and discarded. Launch is accepted only after the
+managed child leads an isolated process group,
 its Linux boot ID/PID/process-group/start-tick identity is durably registered, and that identity
 survives a bounded acceptance window. The checkpoint excludes executable arguments, environment,
 output, and exception text. Same-boot recovery adopts a matching accepted identity to suppress

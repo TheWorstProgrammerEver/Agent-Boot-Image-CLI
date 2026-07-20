@@ -9,6 +9,7 @@
     { "path": "packages/os-adapters" },
     { "path": "packages/os-linux" },
     { "path": "packages/runner" },
+    { "path": "packages/runner-bundle" },
     { "path": "packages/cli" }
   ]
 }

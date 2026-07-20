@@ -9,6 +9,7 @@
     "os-adapters": ["protocol"],
     "os-linux": ["process", "protocol"],
     "runner": ["process", "protocol"],
+    "runner-bundle": ["process", "protocol", "runner"],
     "cli": ["assembly", "definition", "os-adapters", "os-linux", "process", "protocol", "runner", "synth"]
   }
 }

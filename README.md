@@ -16,6 +16,7 @@ in follow-up changes.
 - `@agent-boot/process`: shared process contracts and adapters.
 - `@agent-boot/os-linux`: Linux imaging-host adapters.
 - `@agent-boot/runner`: private on-image runtime.
+- `@agent-boot/runner-bundle`: verified ARM64 Node/runtime and target systemd bundle.
 - `@agent-boot/cli`: host-side composition root.
 
 The enforced dependency graph and architecture decisions are documented in

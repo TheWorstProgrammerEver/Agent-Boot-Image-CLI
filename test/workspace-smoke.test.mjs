@@ -12,6 +12,7 @@ const packages = [
   "os-adapters",
   "os-linux",
   "runner",
+  "runner-bundle",
   "cli",
 ];
 
@@ -22,9 +23,10 @@ test("every workspace package builds as an importable ES module", async () => {
   }
 });
 
-test("the on-image runner cannot be published", async () => {
-  const manifestUrl = new URL("../packages/runner/package.json", import.meta.url);
-  const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
-
-  assert.equal(manifest.private, true);
+test("the on-image runner and its bundle cannot be published", async () => {
+  for (const packageName of ["runner", "runner-bundle"]) {
+    const manifestUrl = new URL(`../packages/${packageName}/package.json`, import.meta.url);
+    const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
+    assert.equal(manifest.private, true);
+  }
 });
