@@ -93,7 +93,7 @@ export class FireAndForgetSupervisor {
         executable: step.command.executable,
         label: `runner step ${step.id}`,
         lifetime: { policy: "managed" },
-        stdio: "inherit",
+        stdio: "stream",
       });
     } catch {
       return {

@@ -15,6 +15,9 @@
     "./providers/codex": {
       "types": "./dist/providers/codex/index.d.ts",
       "default": "./dist/providers/codex/index.js"
+    },
+    "./providers/codex/bin": {
+      "default": "./dist/providers/codex/bin.js"
     }
   },
   "files": ["dist"],

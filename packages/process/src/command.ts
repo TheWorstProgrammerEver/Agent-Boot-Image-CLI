@@ -28,6 +28,11 @@ export interface SpawnOutputChunk {
   readonly stream: SpawnOutputStream;
 }
 
+export interface TerminalStdio {
+  readonly descriptor: number;
+  readonly type: 'terminal';
+}
+
 export type SpawnLifetime =
   | { readonly policy: 'managed' }
   | { readonly policy: 'detached'; readonly unref: boolean };
@@ -39,7 +44,7 @@ export interface SpawnCommand extends CommandDescriptor {
   readonly stdin?: string | Uint8Array;
   readonly lifetime: SpawnLifetime;
   readonly onOutput?: (chunk: SpawnOutputChunk) => void;
-  readonly stdio: 'inherit' | 'stream';
+  readonly stdio: 'inherit' | 'stream' | TerminalStdio;
   readonly timeoutMs?: number;
 }
 

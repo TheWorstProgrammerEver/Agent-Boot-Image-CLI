@@ -32,7 +32,9 @@ own repository. Its maximum timeout and output bounds remain authoritative.
 ## Spawned processes
 
 `NodeSpawnAdapter` uses `spawn()` with `shell: false`. Every call selects
-streamed or inherited stdio and an explicit lifetime policy:
+streamed, inherited, or explicit terminal stdio and an explicit lifetime policy.
+Terminal stdio verifies one existing TTY descriptor and duplicates it onto child descriptors
+0, 1, and 2 without routing child bytes through parent output handlers.
 
 - `managed`: the adapter owns a POSIX process group and removes descendants on
   cancellation, timeout, or parent exit.

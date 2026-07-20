@@ -38,7 +38,7 @@ const cloneSpawnCommand = (command: SpawnCommand): SpawnCommand => ({
     ? {}
     : { stdin: typeof command.stdin === 'string' ? command.stdin : cloneBytes(command.stdin) }),
   lifetime: { ...command.lifetime },
-  stdio: command.stdio,
+  stdio: typeof command.stdio === 'string' ? command.stdio : { ...command.stdio },
 });
 
 export class FakeCommandHost implements CommandHost {
