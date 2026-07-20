@@ -1,4 +1,5 @@
 export interface ArtifactRequest {
+  readonly cancellation?: AbortSignal;
   readonly offset: number;
   readonly url: string;
 }
@@ -21,7 +22,11 @@ export interface ArtifactImageMetadata {
 }
 
 export interface ArtifactMetadataInspector {
-  inspect(path: string, compressedByteLength: number): Promise<ArtifactImageMetadata>;
+  inspect(
+    path: string,
+    compressedByteLength: number,
+    cancellation?: AbortSignal,
+  ): Promise<ArtifactImageMetadata>;
 }
 
 export interface AcquiredOsArtifact extends ArtifactImageMetadata {

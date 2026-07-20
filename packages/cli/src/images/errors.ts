@@ -1,5 +1,6 @@
 export type ArtifactAcquisitionErrorCode =
   | "cache-access"
+  | "canceled"
   | "checksum-mismatch"
   | "download-interrupted"
   | "download-size"
@@ -12,6 +13,7 @@ export type ArtifactAcquisitionErrorCode =
 
 const messages: Record<ArtifactAcquisitionErrorCode, string> = {
   "cache-access": "The OS artifact cache could not be accessed safely.",
+  canceled: "OS artifact acquisition was canceled.",
   "checksum-mismatch": "The downloaded OS artifact failed checksum verification.",
   "download-interrupted": "The OS artifact download was interrupted and can be resumed.",
   "download-size": "The OS artifact download did not match its pinned byte length.",

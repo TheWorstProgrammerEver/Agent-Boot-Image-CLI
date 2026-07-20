@@ -280,3 +280,76 @@ test("a verified cache hit works offline and does not use unverified bytes", asy
     await fixture.cleanup();
   }
 });
+
+test("cancellation aborts a pending request and releases its cache lock", async () => {
+  const fixture = await createArtifactFixture();
+  const cancellation = new globalThis.AbortController();
+  let markRequested;
+  const requested = new Promise(resolve => { markRequested = resolve; });
+  try {
+    const transport = new ScriptedArtifactTransport(request => {
+      markRequested();
+      return new Promise((_resolve, reject) => {
+        request.cancellation.addEventListener("abort", () => {
+          reject(new Error("fixture request aborted"));
+        }, { once: true });
+      });
+    });
+    const acquisition = cacheFor(fixture, transport).acquire(
+      fixture.lock,
+      cancellation.signal,
+    );
+    await requested;
+    cancellation.abort();
+
+    await assert.rejects(
+      acquisition,
+      error => error instanceof ArtifactAcquisitionError && error.code === "canceled",
+    );
+    assert.equal(await isMissing(fixture.paths.lock), true);
+    assert.equal(await isMissing(fixture.paths.artifact), true);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("cancellation short-circuits a cache-lock wait without disturbing the owner", async () => {
+  const fixture = await createArtifactFixture();
+  let releaseBody;
+  let markBodyStarted;
+  const bodyStarted = new Promise(resolve => { markBodyStarted = resolve; });
+  const bodyReleased = new Promise(resolve => { releaseBody = resolve; });
+  try {
+    const transport = new ScriptedArtifactTransport(response({
+      body: {
+        async *[Symbol.asyncIterator]() {
+          markBodyStarted();
+          await bodyReleased;
+          yield fixture.payload;
+        },
+      },
+      headers: { "content-length": fixture.payload.byteLength },
+    }));
+    const cache = cacheFor(fixture, transport);
+    const owner = cache.acquire(fixture.lock);
+    await bodyStarted;
+
+    const cancellation = new globalThis.AbortController();
+    const waiter = cache.acquire(fixture.lock, cancellation.signal);
+    await delay(15);
+    cancellation.abort();
+    await assert.rejects(
+      waiter,
+      error => error instanceof ArtifactAcquisitionError && error.code === "canceled",
+    );
+    assert.equal(await isMissing(fixture.paths.lock), false);
+
+    releaseBody();
+    await owner;
+    assert.equal(await isMissing(fixture.paths.lock), true);
+    assert.equal(await isMissing(fixture.paths.artifact), false);
+  } finally {
+    releaseBody?.();
+    await fixture.cleanup();
+  }
+});

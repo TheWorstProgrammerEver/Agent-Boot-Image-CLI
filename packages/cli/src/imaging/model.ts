@@ -49,7 +49,13 @@ export interface ReadBackVerifier {
 
 export type ReadBackVerifyOptions = RawImageWriteOptions;
 
-export interface ImageWriteTransactionRequest {
+export interface ImageWriteTransactionRequest<AfterVerifyResult = undefined> {
+  readonly afterVerify?: (result: {
+    readonly bytesVerified: number;
+    readonly bytesWritten: number;
+    readonly cancellation: AbortSignal;
+    readonly target: AuthorizedImageTarget;
+  }) => Promise<AfterVerifyResult>;
   readonly cancellation?: AbortSignal;
   readonly expectedByteLength: number;
   readonly onProgress?: (progress: ImageWriteProgress) => void;

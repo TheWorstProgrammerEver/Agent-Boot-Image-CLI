@@ -1,5 +1,8 @@
-import type { BoundedExecHost } from "@agent-boot/process";
+import { Buffer } from "node:buffer";
 
+import type { SpawnHost } from "@agent-boot/process";
+
+import { artifactFailure, throwIfArtifactCanceled } from "./cancellation.js";
 import { ArtifactAcquisitionError } from "./errors.js";
 import type { ArtifactImageMetadata, ArtifactMetadataInspector } from "./model.js";
 
@@ -10,22 +13,52 @@ const positiveInteger = (value: string | undefined): number | undefined => {
 };
 
 export class XzMetadataInspector implements ArtifactMetadataInspector {
-  readonly #commands: BoundedExecHost;
+  readonly #commands: SpawnHost;
 
-  constructor(commands: BoundedExecHost) {
+  constructor(commands: SpawnHost) {
     this.#commands = commands;
   }
 
-  async inspect(path: string, compressedByteLength: number): Promise<ArtifactImageMetadata> {
+  async inspect(
+    path: string,
+    compressedByteLength: number,
+    cancellation?: AbortSignal,
+  ): Promise<ArtifactImageMetadata> {
     try {
-      const { stdout } = await this.#commands.exec({
+      throwIfArtifactCanceled(cancellation);
+      const chunks: Uint8Array[] = [];
+      let outputBytes = 0;
+      let outputExceeded = false;
+      const didExceedOutput = (): boolean => outputExceeded;
+      let cancelRunning = (): void => undefined;
+      const running = this.#commands.spawn({
         arguments: ["--robot", "--list", "--", path],
+        ...(cancellation === undefined ? {} : { cancellation }),
         executable: "xz",
         label: "inspect verified OS artifact",
-        maxOutputBytes: 64 * 1_024,
+        lifetime: { policy: "managed" },
+        onOutput: ({ data, stream }) => {
+          if (stream !== "stdout" || outputExceeded) return;
+          outputBytes += data.byteLength;
+          if (outputBytes > 64 * 1_024) {
+            outputExceeded = true;
+            cancelRunning();
+            return;
+          }
+          chunks.push(Uint8Array.from(data));
+        },
         sensitiveValues: [path],
+        stdio: "stream",
         timeoutMs: 30_000,
       });
+      cancelRunning = (): void => { running.cancel(); };
+      const completion = await running.completion;
+      throwIfArtifactCanceled(cancellation);
+      if (
+        didExceedOutput() || completion.reason !== "exit" ||
+        completion.exitCode !== 0
+      ) throw new ArtifactAcquisitionError("metadata-inspection");
+      const stdout = Buffer.concat(chunks).toString("utf8");
       const fields = stdout.split("\n").find(line => line.startsWith("file\t"))?.split("\t");
       const listedCompressedBytes = positiveInteger(fields?.[3]);
       const imageByteLength = positiveInteger(fields?.[4]);
@@ -38,8 +71,8 @@ export class XzMetadataInspector implements ArtifactMetadataInspector {
         imageByteLength,
         imageFormat: "raw",
       };
-    } catch {
-      throw new ArtifactAcquisitionError("metadata-inspection");
+    } catch (error) {
+      throw artifactFailure(error, cancellation, "metadata-inspection");
     }
   }
 }

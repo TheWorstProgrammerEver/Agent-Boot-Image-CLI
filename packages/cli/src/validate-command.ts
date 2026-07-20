@@ -8,6 +8,8 @@ import {
 } from "./validation-errors.js";
 import { loadTrustedDefinition } from "./trusted-definition-loader.js";
 import { runSynthCommand } from "./synth-command.js";
+import { runImageCommand } from "./image/command.js";
+import type { ImageWorkflowDependencies } from "./image/model.js";
 
 export const VALIDATION_EXIT_CODE = {
   valid: 0,
@@ -23,6 +25,12 @@ export const CREATE_AGENT_EXIT_CODE = {
   outputExists: 6,
   synthesisFailure: 7,
   driveInspectionFailure: 8,
+  imagePreparationFailure: 9,
+  imagePreflightFailure: 10,
+  imageWriteFailure: 11,
+  imageCustomizationFailure: 12,
+  imageCleanupFailure: 13,
+  canceled: 130,
 } as const;
 
 export type ValidationExitCode =
@@ -38,6 +46,7 @@ export interface CommandIo {
 
 export interface CreateAgentDependencies {
   readonly driveInspector?: DriveInspector;
+  readonly imageWorkflow?: ImageWorkflowDependencies;
 }
 
 const TRUST_WARNING =
@@ -64,13 +73,25 @@ export const runCreateAgent = async (
     return runSynthCommand(arguments_.slice(1), io);
   }
 
+  if (arguments_[0] === "image") {
+    io.stderr(TRUST_WARNING);
+    if (dependencies.imageWorkflow === undefined) {
+      io.stderr("Image orchestration is unavailable in this CLI composition.");
+      return CREATE_AGENT_EXIT_CODE.imagePreparationFailure;
+    }
+    return runImageCommand(arguments_.slice(1), io, dependencies.imageWorkflow);
+  }
+
   const definitionPath = arguments_.length === 2 && arguments_[0] === "validate"
     ? arguments_[1]
     : arguments_.length === 3 && arguments_[0] === "validate" && arguments_[1] === "--definition"
       ? arguments_[2]
       : undefined;
   if (definitionPath === undefined) {
-    io.stderr("Usage: create-agent validate [--definition] <definition.ts> | synth ... | drives list");
+    io.stderr(
+      "Usage: create-agent validate [--definition] <definition.ts> | synth ... | " +
+      "drives list | image ...",
+    );
     return VALIDATION_EXIT_CODE.usage;
   }
 

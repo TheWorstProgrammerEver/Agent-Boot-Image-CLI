@@ -59,29 +59,59 @@ test("native transport succeeds against local HTTP and never follows redirects",
   }
 });
 
+test("native transport aborts a pending HTTP request", async () => {
+  let markStarted;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  const server = createServer(() => { markStarted(); });
+  await listen(server);
+  try {
+    const address = server.address();
+    assert.equal(typeof address, "object");
+    const cancellation = new globalThis.AbortController();
+    const pending = new NativeArtifactTransport().request({
+      cancellation: cancellation.signal,
+      offset: 0,
+      url: `http://127.0.0.1:${String(address.port)}/pending`,
+    });
+    await started;
+    cancellation.abort();
+    await assert.rejects(pending, error => error.name === "AbortError");
+  } finally {
+    server.closeAllConnections();
+    await close(server);
+  }
+});
+
 test("XZ metadata exposes verified compressed and raw image sizes", async () => {
-  const commands = new FakeCommandHost().scriptExecResult({
-    exitCode: 0,
-    signal: null,
-    stderr: "",
-    stdout: "name\t/path/fixture.img.xz\nfile\t1\t2\t31\t4096\t0.008\tCRC64\t0\n",
+  const commands = new FakeCommandHost().scriptSpawnResult({
+    output: [{
+      data: Buffer.from("name\t/path/fixture.img.xz\nfile\t1\t2\t31\t4096\t0.008\tCRC64\t0\n"),
+      stream: "stdout",
+    }],
+    result: { exitCode: 0, reason: "exit", signal: null },
   });
   const inspector = new XzMetadataInspector(commands);
+  const cancellation = new globalThis.AbortController();
 
-  assert.deepEqual(await inspector.inspect("/cache/definition-secret.img.xz", 31), {
+  assert.deepEqual(await inspector.inspect(
+    "/cache/definition-secret.img.xz",
+    31,
+    cancellation.signal,
+  ), {
     compressedByteLength: 31,
     compressionFormat: "xz",
     imageByteLength: 4_096,
     imageFormat: "raw",
   });
-  assert.deepEqual(commands.execCalls[0].arguments, [
+  assert.deepEqual(commands.spawnCalls[0].arguments, [
     "--robot", "--list", "--", "/cache/definition-secret.img.xz",
   ]);
-  assert.deepEqual(commands.execCalls[0].sensitiveValues, ["/cache/definition-secret.img.xz"]);
+  assert.equal(commands.spawnCalls[0].cancellation, cancellation.signal);
+  assert.deepEqual(commands.spawnCalls[0].sensitiveValues, ["/cache/definition-secret.img.xz"]);
 });
 
 test("XZ command failures are reduced to bounded non-secret diagnostics", async () => {
-  const commands = new FakeCommandHost().scriptExecError(new Error("definition-secret"));
+  const commands = new FakeCommandHost().scriptSpawnError(new Error("definition-secret"));
   const inspector = new XzMetadataInspector(commands);
   await assert.rejects(
     inspector.inspect("/cache/definition-secret.img.xz", 31),
@@ -90,4 +120,32 @@ test("XZ command failures are reduced to bounded non-secret diagnostics", async 
       error.code === "metadata-inspection" &&
       !error.message.includes("definition-secret"),
   );
+});
+
+test("XZ metadata inspection cancels its managed command", async () => {
+  const cancellation = new globalThis.AbortController();
+  let command;
+  const inspector = new XzMetadataInspector({
+    spawn(input) {
+      command = input;
+      return {
+        cancel: () => undefined,
+        completion: new Promise(resolve => {
+          input.cancellation.addEventListener("abort", () => {
+            resolve({ exitCode: null, reason: "canceled", signal: null });
+          }, { once: true });
+        }),
+        pid: undefined,
+        sendSignal: () => false,
+      };
+    },
+  });
+
+  const pending = inspector.inspect("/cache/definition-secret.img.xz", 31, cancellation.signal);
+  cancellation.abort();
+  await assert.rejects(
+    pending,
+    error => error instanceof ArtifactAcquisitionError && error.code === "canceled",
+  );
+  assert.equal(command.cancellation, cancellation.signal);
 });

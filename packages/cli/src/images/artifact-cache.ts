@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import type { OsLock } from "@agent-boot/protocol";
 
 import { cachePathsFor, type ArtifactCachePaths } from "./cache-layout.js";
+import { artifactFailure, throwIfArtifactCanceled } from "./cancellation.js";
 import { sha256File } from "./checksum.js";
 import { downloadArtifact } from "./download.js";
 import { ArtifactAcquisitionError } from "./errors.js";
@@ -67,7 +68,8 @@ export class ArtifactCache {
     this.#transport = options.transport;
   }
 
-  async acquire(lock: OsLock): Promise<AcquiredOsArtifact> {
+  async acquire(lock: OsLock, cancellation?: AbortSignal): Promise<AcquiredOsArtifact> {
+    throwIfArtifactCanceled(cancellation);
     const paths = cachePathsFor(this.#cacheDirectory, lock.artifact.sha256);
     try {
       await Promise.all([
@@ -80,24 +82,34 @@ export class ArtifactCache {
       throw new ArtifactAcquisitionError("cache-access");
     }
 
-    const release = await acquireFileLock(paths.lock, this.#lockTimeoutMs, this.#lockPollMs);
+    let release: Awaited<ReturnType<typeof acquireFileLock>>;
+    try {
+      release = await acquireFileLock(
+        paths.lock,
+        this.#lockTimeoutMs,
+        this.#lockPollMs,
+        cancellation,
+      );
+    } catch (error) {
+      throw artifactFailure(error, cancellation, "cache-access");
+    }
     try {
       try {
-        if (await this.#isVerified(paths.artifact, lock)) {
-          return await this.#result(paths.artifact, lock, "cache");
+        throwIfArtifactCanceled(cancellation);
+        if (await this.#isVerified(paths.artifact, lock, cancellation)) {
+          return await this.#result(paths.artifact, lock, "cache", cancellation);
         }
         if (await existingRegularSize(paths.artifact) !== undefined) {
           await this.#quarantine(paths.artifact, paths);
         }
-        const promotedPartial = await this.#promoteCompletedPartial(paths, lock);
+        const promotedPartial = await this.#promoteCompletedPartial(paths, lock, cancellation);
         if (!promotedPartial) {
-          await this.#download(paths, lock);
-          await this.#verifyAndPromote(paths, lock);
+          await this.#download(paths, lock, cancellation);
+          await this.#verifyAndPromote(paths, lock, cancellation);
         }
-        return await this.#result(paths.artifact, lock, "download");
+        return await this.#result(paths.artifact, lock, "download", cancellation);
       } catch (error) {
-        if (error instanceof ArtifactAcquisitionError) throw error;
-        throw new ArtifactAcquisitionError("cache-access");
+        throw artifactFailure(error, cancellation, "cache-access");
       }
     } finally {
       await release();
@@ -108,18 +120,21 @@ export class ArtifactCache {
     path: string,
     lock: OsLock,
     source: AcquiredOsArtifact["source"],
+    cancellation?: AbortSignal,
   ): Promise<AcquiredOsArtifact> {
-    const metadata = await this.#inspector.inspect(path, lock.artifact.byteLength);
+    throwIfArtifactCanceled(cancellation);
+    const metadata = await this.#inspector.inspect(path, lock.artifact.byteLength, cancellation);
+    throwIfArtifactCanceled(cancellation);
     return { ...metadata, path, sha256: lock.artifact.sha256, source };
   }
 
-  async #isVerified(path: string, lock: OsLock): Promise<boolean> {
+  async #isVerified(path: string, lock: OsLock, cancellation?: AbortSignal): Promise<boolean> {
     const size = await existingRegularSize(path);
     if (size === undefined || size === -1 || size !== lock.artifact.byteLength) return false;
     try {
-      return await sha256File(path) === lock.artifact.sha256;
-    } catch {
-      throw new ArtifactAcquisitionError("cache-access");
+      return await sha256File(path, cancellation) === lock.artifact.sha256;
+    } catch (error) {
+      throw artifactFailure(error, cancellation, "cache-access");
     }
   }
 
@@ -133,7 +148,11 @@ export class ArtifactCache {
     }
   }
 
-  async #promoteCompletedPartial(paths: ArtifactCachePaths, lock: OsLock): Promise<boolean> {
+  async #promoteCompletedPartial(
+    paths: ArtifactCachePaths,
+    lock: OsLock,
+    cancellation?: AbortSignal,
+  ): Promise<boolean> {
     const size = await existingRegularSize(paths.partial);
     if (size === undefined) return false;
     if (size !== lock.artifact.byteLength) {
@@ -144,9 +163,9 @@ export class ArtifactCache {
     }
     let verified = false;
     try {
-      verified = await sha256File(paths.partial) === lock.artifact.sha256;
-    } catch {
-      throw new ArtifactAcquisitionError("cache-access");
+      verified = await sha256File(paths.partial, cancellation) === lock.artifact.sha256;
+    } catch (error) {
+      throw artifactFailure(error, cancellation, "cache-access");
     }
     if (!verified) {
       await rm(paths.partial, { force: true });
@@ -156,13 +175,18 @@ export class ArtifactCache {
     return true;
   }
 
-  async #download(paths: ArtifactCachePaths, lock: OsLock): Promise<void> {
+  async #download(
+    paths: ArtifactCachePaths,
+    lock: OsLock,
+    cancellation?: AbortSignal,
+  ): Promise<void> {
     const partialSize = await existingRegularSize(paths.partial);
     if (partialSize === -1) {
       await this.#quarantine(paths.partial, paths);
     }
     const offset = partialSize === undefined || partialSize === -1 ? 0 : partialSize;
     await downloadArtifact({
+      ...(cancellation === undefined ? {} : { cancellation }),
       expectedByteLength: lock.artifact.byteLength,
       offset,
       path: paths.partial,
@@ -171,12 +195,16 @@ export class ArtifactCache {
     });
   }
 
-  async #verifyAndPromote(paths: ArtifactCachePaths, lock: OsLock): Promise<void> {
+  async #verifyAndPromote(
+    paths: ArtifactCachePaths,
+    lock: OsLock,
+    cancellation?: AbortSignal,
+  ): Promise<void> {
     let digest: string;
     try {
-      digest = await sha256File(paths.partial);
-    } catch {
-      throw new ArtifactAcquisitionError("cache-access");
+      digest = await sha256File(paths.partial, cancellation);
+    } catch (error) {
+      throw artifactFailure(error, cancellation, "cache-access");
     }
     if (digest !== lock.artifact.sha256) {
       await rm(paths.partial, { force: true });

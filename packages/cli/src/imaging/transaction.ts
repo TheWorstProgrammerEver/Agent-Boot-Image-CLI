@@ -30,7 +30,8 @@ export interface ImageWriteTransactionDependencies {
   readonly writer: RawImageWriter;
 }
 
-export interface ImageWriteTransactionResult {
+export interface ImageWriteTransactionResult<AfterVerifyResult = undefined> {
+  readonly afterVerifyResult: AfterVerifyResult;
   readonly bytesVerified: number;
   readonly bytesWritten: number;
   readonly target: AuthorizedImageTarget;
@@ -72,7 +73,7 @@ const unmountDescendants = async (
   }
 };
 
-const targetFromPlan = (request: ImageWriteTransactionRequest): AuthorizedImageTarget => ({
+const targetFromPlan = (request: ImageWriteTransactionRequest<unknown>): AuthorizedImageTarget => ({
   resolvedTarget: request.plan.resolvedTarget,
   sizeBytes: request.plan.sizeBytes,
   stableTarget: request.plan.stableTarget,
@@ -81,16 +82,21 @@ const targetFromPlan = (request: ImageWriteTransactionRequest): AuthorizedImageT
 const cleanupFailure = (
   operationError: Error | undefined,
   errors: readonly unknown[],
+  completedPhase: "verify" | undefined,
 ): ImageWriteError => new ImageWriteError(
   "cleanup-failed",
   "Image write transaction cleanup did not complete.",
-  { cause: new AggregateError(operationError === undefined ? errors : [operationError, ...errors]) },
+  {
+    cause: new AggregateError(operationError === undefined ? errors : [operationError, ...errors]),
+    cleanupOnly: operationError === undefined,
+    ...(completedPhase === undefined ? {} : { completedPhase }),
+  },
 );
 
-export const writeImageTransaction = async (
-  request: ImageWriteTransactionRequest,
+export const writeImageTransaction = async <AfterVerifyResult = undefined>(
+  request: ImageWriteTransactionRequest<AfterVerifyResult>,
   dependencies: ImageWriteTransactionDependencies,
-): Promise<ImageWriteTransactionResult> => {
+): Promise<ImageWriteTransactionResult<AfterVerifyResult>> => {
   assertConfirmedImageTargetPlan(request.plan);
   validateByteLength(request.expectedByteLength);
   if (request.expectedByteLength > request.plan.sizeBytes) {
@@ -112,7 +118,8 @@ export const writeImageTransaction = async (
 
   let lock: Awaited<ReturnType<DeviceOperationLocker["acquire"]>> | undefined;
   let operationError: Error | undefined;
-  let result: ImageWriteTransactionResult | undefined;
+  let result: ImageWriteTransactionResult<AfterVerifyResult> | undefined;
+  let completedPhase: "verify" | undefined;
   const cleanupErrors: unknown[] = [];
 
   try {
@@ -153,7 +160,19 @@ export const writeImageTransaction = async (
         "Writer or verifier reported an inexact image byte count.",
       );
     }
-    result = { bytesVerified, bytesWritten, target };
+    const customizationTarget = await recheckImageTargetForWrite(request.plan, dependencies.inspector);
+    throwIfCanceled(cancellation.signal);
+    completedPhase = "verify";
+    const afterVerifyResult = request.afterVerify === undefined
+      ? undefined as AfterVerifyResult
+      : await request.afterVerify({
+          bytesVerified,
+          bytesWritten,
+          cancellation: cancellation.signal,
+          target: customizationTarget,
+        });
+    throwIfCanceled(cancellation.signal);
+    result = { afterVerifyResult, bytesVerified, bytesWritten, target: customizationTarget };
   } catch (error) {
     operationError = error instanceof Error
       ? error
@@ -182,7 +201,9 @@ export const writeImageTransaction = async (
     for (const [signal, listener] of signalListeners) signalSource.off(signal, listener);
   }
 
-  if (cleanupErrors.length > 0) throw cleanupFailure(operationError, cleanupErrors);
+  if (cleanupErrors.length > 0) {
+    throw cleanupFailure(operationError, cleanupErrors, completedPhase);
+  }
   if (operationError !== undefined) throw operationError;
   if (result === undefined) throw new ImageWriteError("cleanup-failed", "Transaction produced no result.");
   return result;
