@@ -4,8 +4,8 @@ Date: 2026-07-20
 
 Issue: [RYA-146 - Run approved physical image and first-boot validation](https://linear.app/ryan-hayward/issue/RYA-146/agent-boot-run-approved-physical-image-and-first-boot-validation)
 
-Result: **blocked after two safe customization failures; first boot was not
-attempted.**
+Result: **physical imaging complete; first-boot validation awaits the
+human-assisted hardware and manual device-auth step.**
 
 This record deliberately omits credentials, the approved target's unique
 by-id value and serial, the network identity, the local operation path, and
@@ -18,11 +18,14 @@ comment attached to RYA-146.
   preparation and again at the destructive boundary.
 - Confirmed RYA-143 and RYA-145 were `Done` before the first attempt. Confirmed
   RYA-143, RYA-145, and the first-attempt blocker RYA-184 were `Done` before the
-  approved rerun.
+  second attempt. Confirmed RYA-143, RYA-145, RYA-184, and the second-attempt
+  blocker RYA-186 were `Done` before the successful third attempt.
 - Confirmed the human comment named the exact whole-disk stable by-id target and
   explicitly declared that device disposable.
-- The first attempt used repository commit `0d01ac6` from `main`. The rerun used
-  product baseline `120197b` from `main`, after the RYA-184 correction merged.
+- The first attempt used repository commit `0d01ac6` from `main`. The second
+  attempt used product baseline `120197b`, after the RYA-184 correction merged.
+  The successful third attempt used product baseline `3d10420`, after the
+  independently reviewed RYA-186 capacity correction merged.
 - Kept the trusted deployment definition, Wi-Fi input, disposable initial
   password, one-time transaction marker, raw transcripts, cache, and recovery
   files in a mode-`0700` host-local operation tree. Secret files were mode
@@ -40,12 +43,15 @@ npm ci --ignore-scripts
 npm run check
 npm test
 
-tests 393
-pass 393
+tests 406
+pass 405
 fail 0
+skipped 1 (the explicitly opt-in capacity loop test)
 ```
 
-Before the rerun, the ARM64 runner bundle was freshly rebuilt from the
+The four-test guarded non-destructive integration suite also passed.
+
+Before each rerun, the ARM64 runner bundle was freshly rebuilt from the
 checksum-verified Node distribution, then verified independently through
 `verifyRunnerBundle()`. The complete image command also passed `--dry-run`;
 dry-run reported that it accessed no secrets, downloads, commands, devices, or
@@ -60,8 +66,8 @@ output directories.
 | Node version | `v24.18.0` LTS `Krypton` |
 | Node distribution SHA-256 | `58c9520501f6ae2b52d5b210444e24b9d0c029a58c5011b797bc1fe7105886f6` |
 | Node extracted-tree SHA-256 | `fe13f28dff3433d6dce353dd7f7da15f146cbca657fe55272c1de0b0b746aa68` |
-| Runner bundle SHA-256 | `bfe43a84f28b9c19a979ad29ad2bdc4b4f7587c995ffe6b3b8e3eca2c351a976` |
-| Runner bundle manifest file SHA-256 | `c34edcbd2e3f1a052e220fc4577e6c3ed24f32e05fc36499571bd679daf9b740` |
+| Runner bundle SHA-256 | `3c4dd5efa0c347f43b49cf12692ebfd5f85257b0ec2a9487d8d0671a8820ed40` |
+| Runner bundle manifest file SHA-256 | `a51677afc4aae5d57bf5a62aaffff671a2423bb914d2f109afcfa7201ee0d554` |
 | Runner bundle entries | `5,911` |
 
 ## Device topology and guardrails
@@ -87,8 +93,8 @@ and mounted-descendant checks.
 
 ## Imaging attempts
 
-Both guarded live commands ran in inspectable detached systemd units with a
-separate state file and redacted transcript. Each:
+All three guarded live commands ran in inspectable detached systemd units with
+a separate state file and redacted transcript. Each:
 
 1. loaded and validated the trusted definition;
 2. resolved the immutable curated OS lock;
@@ -117,6 +123,31 @@ That recovery state is reached only after full read-back verification succeeds.
 The workflow removed its private workspace, wiped its in-memory secret buffers,
 released the device lock, and left the target unmounted.
 
+After RYA-186 merged, the approved third attempt repeated the complete workflow
+from product baseline `3d10420`. It again verified the immutable OS artifact,
+passed every live target guardrail without an override, wrote exactly
+`2,977,955,840` bytes, and completed the full byte-for-byte read-back. The
+guarded transaction then expanded only the verified final ext4 root to the
+larger physical target, revalidated the locked partition topology, completed
+the entire customization plan, passed both read-only filesystem checks, and
+cleanly unmounted the target. The command exited `0` with recovery state
+`complete`.
+
+The final partition sizes were:
+
+| Partition | Size | Filesystem | Label |
+| --- | ---: | --- | --- |
+| Boot | 536,870,912 bytes | FAT32 | `bootfs` |
+| Root | 127,775,542,272 bytes | ext4 | `rootfs` |
+
+Independent post-command `fsck.vfat -n` and `e2fsck -f -n` checks passed. A
+read-only inspection confirmed the account and network first-boot inputs, SSH
+marker, immutable assembly, private runtime, enabled runner service, workspace,
+and the sole runner-consumed bootstrap secret source without reading any
+secret-bearing content. The two customization-only secrets were absent from
+the runner source directory as designed. The ext4 root retained 30,141,524
+free 4 KiB blocks and the target again had zero mounted descendants.
+
 ## Preserved rerun failure state
 
 Post-failure topology showed the expected raw image partition table and no
@@ -142,8 +173,8 @@ output were absent. No secret contents were read. The root filesystem reported
 zero generally available bytes, and all inspection mounts were subsequently
 unmounted.
 
-No first boot was attempted because the media is internally inconsistent and
-does not satisfy the adapter's final postconditions.
+No first boot was attempted from that failed state because the media was
+internally inconsistent and did not satisfy the adapter's final postconditions.
 
 ## Root cause reproductions
 
@@ -186,15 +217,14 @@ rest of the customization plan. The failed physical root retained only 4,097
 free blocks, all reserved from ordinary use, after the partial write.
 
 Follow-up [RYA-186 - Provision and preflight filesystem capacity before customization](https://linear.app/ryan-hayward/issue/RYA-186/agent-boot-provision-and-preflight-filesystem-capacity-before)
-owns the product correction. It requires complete cross-root capacity preflight
-before mutation and safe root-capacity provisioning on larger targets. RYA-146
-must remain blocked on RYA-186; the preserved target must not be booted or
-retried in its current state.
+implemented complete cross-root capacity preflight before mutation and safe
+root-capacity provisioning on larger targets. Its independently reviewed merge
+was the baseline for the successful third physical attempt described above.
 
 ## First-boot validation matrix
 
-All first-boot claims remain unproven because the prerequisite customization
-did not complete:
+All first-boot claims remain pending until the human-assisted hardware boot and
+manual device-auth step:
 
 | Required proof | Result |
 | --- | --- |
@@ -207,8 +237,9 @@ did not complete:
 | Prompt execution | Not run |
 | Secret transaction cleanup | Not run |
 | Interruption and reboot recovery | Not run |
-| Final health/failure observability | Both imaging failures were bounded and inspectable; boot health not run |
+| Final health/failure observability | Imaging success and both earlier failures were bounded and inspectable; boot health not run |
 
-After RYA-186 is resolved, resume RYA-146 by refreshing the exact approval and
-dependencies, rebuilding all artifacts from reviewed `main`, repeating the
-entire guarded image transaction, and then executing the first-boot matrix.
+Resume by booting the cleanly unmounted media on supported Raspberry Pi 5
+hardware with a human available at tty1 for the manual Codex device-auth step,
+then execute the interruption, reboot, secret-cleanup, prompt, and final-health
+assertions without copying device codes or credential-bearing output.
