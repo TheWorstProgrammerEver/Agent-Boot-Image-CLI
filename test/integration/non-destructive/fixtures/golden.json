@@ -1,0 +1,34 @@
+{
+  "assemblyId": "assembly-2f0c223c1cf1c69e8bcf61aedb94c036",
+  "assemblySha256": "fdf62f689cedb5bed8eea942681cfd0ff018389c809d4415417065913fe9d2e7",
+  "schemaVersions": {
+    "manifest": 1,
+    "osLock": 1,
+    "runnerPlan": 1
+  },
+  "requiredAssertions": [
+    "partition-contract",
+    "bootfs-root-only",
+    "bootfs-runtime-mount",
+    "account-bootstrap",
+    "ssh-bootstrap",
+    "netplan-v2",
+    "runner-layout",
+    "runner-documents",
+    "bootstrap-secret-modes",
+    "console-service",
+    "service-enabled"
+  ],
+  "requiredTargetPaths": [
+    "boot/network-config",
+    "boot/ssh",
+    "boot/userconf",
+    "root/etc/agent-boot/manifest.json",
+    "root/etc/agent-boot/plan.json",
+    "root/etc/systemd/system/agent-boot-runner.service",
+    "root/etc/systemd/system/multi-user.target.wants/agent-boot-runner.service",
+    "root/opt/agent-boot/prompts/bootstrap-agent",
+    "root/opt/agent-boot/runtime/bin/node",
+    "root/var/lib/agent-boot"
+  ]
+}

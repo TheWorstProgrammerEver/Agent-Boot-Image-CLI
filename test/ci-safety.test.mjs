@@ -20,6 +20,11 @@ test("CI stays inside an unprivileged, non-device container", async () => {
   assert.match(workflow, /--cap-drop=ALL/u);
   assert.match(workflow, /--security-opt=no-new-privileges/u);
   assert.match(workflow, /npm ci --ignore-scripts/u);
+  assert.match(workflow, /non-destructive-integration:/u);
+  assert.match(workflow, /npm run test:non-destructive/u);
+  assert.match(workflow, /if: failure\(\)/u);
+  assert.match(workflow, /actions\/upload-artifact@v4/u);
+  assert.match(workflow, /\.artifacts\/non-destructive/u);
 
   for (const pattern of prohibited) {
     assert.doesNotMatch(workflow, pattern);
