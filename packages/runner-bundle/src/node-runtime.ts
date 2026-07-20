@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -26,8 +27,12 @@ const embeddedVersion = (header: string): { lts: string; version: string } => {
 };
 
 const assertArm64Elf = async (nodePath: string): Promise<void> => {
-  const handle = await open(nodePath, "r");
+  const handle = await open(nodePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
+    const status = await handle.stat();
+    if (!status.isFile() || (status.mode & 0o777) !== 0o755) {
+      throw new Error("Node executable must be a regular file with mode 0755.");
+    }
     const header = Buffer.alloc(20);
     const { bytesRead } = await handle.read(header, 0, header.length, 0);
     if (

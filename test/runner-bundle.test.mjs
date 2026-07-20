@@ -209,6 +209,25 @@ test("runtime verification rejects architecture, metadata, tree drift, and escap
   }
 });
 
+test("runtime verification rejects a correctly hashed non-executable Node entry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-node-runtime-mode-"));
+  try {
+    const runtime = await createRuntime(root);
+    await chmod(join(runtime.runtime, "bin", "node"), 0o644);
+    const nonExecutablePin = {
+      ...runtime.pin,
+      treeSha256: treeSha256(await inspectTree(runtime.runtime)),
+    };
+
+    await assert.rejects(
+      verifyNodeRuntime(runtime.runtime, nonExecutablePin),
+      /regular file with mode 0755/u,
+    );
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("systemd service owns tty1, uses explicit restart/state policy, and verifies in an isolated root", async t => {
   const fixture = await createBundleFixture();
   try {
