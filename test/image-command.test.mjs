@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { PassThrough } from "node:stream";
 import test from "node:test";
+import { clearTimeout, setTimeout } from "node:timers";
 import { URL } from "node:url";
 
 import {
@@ -331,7 +332,7 @@ test("every injected phase failure short-circuits later work and still cleans ow
 
 test("signals at every phase short-circuit safely and remove the workspace once acquired", async t => {
   for (const phase of [
-    "load", "resolve-os", "runner-artifacts", "verify-bundle", "synthesize", "secrets",
+    "resolve-os", "runner-artifacts", "verify-bundle", "synthesize", "secrets",
     "artifact", "workspace", "publish", "prepare-source", "preflight", "confirm",
     "lock", "recheck", "write", "verify", "customize", "check",
   ]) await t.test(phase, async () => {
@@ -340,6 +341,59 @@ test("signals at every phase short-circuit safely and remove the workspace once 
     assert.equal(harness.events.at(-1) === "cleanup", harness.events.includes("workspace"));
     assert.equal(harness.dependencies.signalSource.listenerCount("SIGTERM"), 0);
   });
+});
+
+test("pending trusted definition loading retains default executable signal handling", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-image-pending-load-"));
+  const definitionPath = join(root, "pending-definition.mjs");
+  let child;
+  try {
+    await writeFile(definitionPath, `
+setInterval(() => undefined, 1_000);
+process.stderr.write("pending-definition-ready\\n");
+await new Promise(() => undefined);
+export default {};
+`);
+    const cliArguments = argumentsFor("--dry-run");
+    cliArguments[cliArguments.indexOf("--definition") + 1] = definitionPath;
+    child = spawn(process.execPath, ["packages/cli/dist/bin.js", "image", ...cliArguments], {
+      cwd: process.cwd(),
+      env: { ...process.env, PATH: "/fixture/no-commands-available" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Pending definition did not report readiness."));
+      }, 2_000);
+      const onData = chunk => {
+        if (!chunk.toString().includes("pending-definition-ready")) return;
+        clearTimeout(timeout);
+        child.stderr.off("data", onData);
+        child.off("exit", onExit);
+        resolve();
+      };
+      const onExit = (code, signal) => {
+        clearTimeout(timeout);
+        child.stderr.off("data", onData);
+        reject(new Error(`Image command exited before definition blocked (${code}, ${signal}).`));
+      };
+      child.stderr.on("data", onData);
+      child.once("exit", onExit);
+    });
+
+    const exited = once(child, "exit");
+    assert.equal(child.kill("SIGINT"), true);
+    const [code, signal] = await exited;
+    assert.equal(code, null);
+    assert.equal(signal, "SIGINT");
+  } finally {
+    if (child?.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+      await once(child, "exit");
+    }
+    await rm(root, { force: true, recursive: true });
+  }
 });
 
 test("a signal aborts pending artifact acquisition instead of waiting for it to settle", async () => {

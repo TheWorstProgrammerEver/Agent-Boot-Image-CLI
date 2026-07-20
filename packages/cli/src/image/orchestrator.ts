@@ -39,7 +39,7 @@ export const runImageWorkflow = async (
   const cancellation = new AbortController();
   const abort = (): void => { cancellation.abort(); };
   const signalSource = dependencies.signalSource ?? process;
-  for (const signal of forwardedSignals) signalSource.on(signal, abort);
+  let ownsSignalHandling = false;
 
   let activePhase: ImageWorkflowPhase = "validation";
   let recovery: ImageRecoveryState = "target-unchanged";
@@ -51,6 +51,8 @@ export const runImageWorkflow = async (
 
   try {
     const loaded = await dependencies.loadDefinition(request.definitionPath);
+    ownsSignalHandling = true;
+    for (const signal of forwardedSignals) signalSource.on(signal, abort);
     checkCanceled(cancellation.signal);
 
     activePhase = "os-resolution";
@@ -202,7 +204,9 @@ export const runImageWorkflow = async (
         cleanupErrors.push(error);
       }
     }
-    for (const signal of forwardedSignals) signalSource.off(signal, abort);
+    if (ownsSignalHandling) {
+      for (const signal of forwardedSignals) signalSource.off(signal, abort);
+    }
   }
 
   if (cleanupErrors.length > 0) {
