@@ -1,7 +1,6 @@
 import { prepareImageTargetPlan } from "../drives/index.js";
 import type { ImageWriteProgress } from "../imaging/index.js";
 import {
-  asImageWorkflowError,
   ImageWorkflowError,
   type ImageRecoveryState,
   type ImageWorkflowPhase,
@@ -12,7 +11,7 @@ import type {
   ImageWorkflowResult,
 } from "./model.js";
 import type { CommandIo } from "../validate-command.js";
-import { phaseForFailure } from "./failure.js";
+import { cleanupFailedFor, completedRecoveryFor, phaseForFailure } from "./failure.js";
 import { printAssemblyPlan } from "./plan.js";
 
 const forwardedSignals = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
@@ -24,6 +23,13 @@ const checkCanceled = (cancellation: AbortSignal): void => {
 const wipeSecrets = (secrets: ReadonlyMap<string, Uint8Array> | undefined): void => {
   for (const value of secrets?.values() ?? []) value.fill(0);
 };
+
+const latestRecovery = (
+  current: ImageRecoveryState,
+  completed: "complete" | "target-verified-needs-customization" | undefined,
+): ImageRecoveryState => completed === "complete" || current === "complete"
+  ? "complete"
+  : completed ?? current;
 
 export const runImageWorkflow = async (
   request: ImageCommandRequest,
@@ -77,7 +83,8 @@ export const runImageWorkflow = async (
       };
     } else {
       activePhase = "validation";
-      bootstrapSecrets = await dependencies.loadBootstrapSecrets(loaded.definition);
+      const loadedBootstrapSecrets = await dependencies.loadBootstrapSecrets(loaded.definition);
+      bootstrapSecrets = loadedBootstrapSecrets;
       checkCanceled(cancellation.signal);
 
       activePhase = "artifact-acquisition";
@@ -89,11 +96,12 @@ export const runImageWorkflow = async (
       checkCanceled(cancellation.signal);
 
       activePhase = "preparation";
-      workspace = await dependencies.createWorkspace();
-      await dependencies.publishAssembly(workspace, assembly);
+      const preparedWorkspace = await dependencies.createWorkspace();
+      workspace = preparedWorkspace;
+      await dependencies.publishAssembly(preparedWorkspace, assembly);
       const preparedSource = await dependencies.prepareImageSource(
         artifact,
-        workspace,
+        preparedWorkspace,
         cancellation.signal,
       );
       checkCanceled(cancellation.signal);
@@ -123,6 +131,21 @@ export const runImageWorkflow = async (
 
       activePhase = "lock";
       const writeResult = await dependencies.writeImage({
+        afterVerify: async ({ cancellation: transactionCancellation, target }) => {
+          recovery = "target-verified-needs-customization";
+          activePhase = "customize";
+          const customization = await dependencies.customizeImage({
+            assemblyDirectory: preparedWorkspace.assemblyDirectory,
+            bootstrapSecrets: loadedBootstrapSecrets,
+            cancellation: transactionCancellation,
+            definition: loaded.definition,
+            osLock,
+            runnerBundleDirectory: request.runnerBundleDirectory,
+            targetPath: target.resolvedTarget,
+          });
+          recovery = "complete";
+          return customization;
+        },
         cancellation: cancellation.signal,
         expectedByteLength: artifact.imageByteLength,
         lockDirectory: request.lockDirectory,
@@ -132,27 +155,13 @@ export const runImageWorkflow = async (
         plan: confirmedPlan,
         source: preparedSource.source,
       });
-      recovery = "target-verified-needs-customization";
-      checkCanceled(cancellation.signal);
-
-      activePhase = "customize";
-      const customization = await dependencies.customizeImage({
-        assemblyDirectory: workspace.assemblyDirectory,
-        bootstrapSecrets,
-        cancellation: cancellation.signal,
-        definition: loaded.definition,
-        osLock,
-        runnerBundleDirectory: request.runnerBundleDirectory,
-        targetPath: writeResult.target.resolvedTarget,
-      });
-      recovery = "complete";
       checkCanceled(cancellation.signal);
 
       result = {
         assemblyId: assembly.assemblyId,
         catalogId: osLock.catalogId,
         dryRun: false,
-        filesystemCheckCount: customization.filesystemChecks.length,
+        filesystemCheckCount: writeResult.afterVerifyResult.filesystemChecks.length,
         osArtifactSha256: artifact.sha256,
         targetBytesVerified: writeResult.bytesVerified,
         targetVerification: "read-back-passed",
@@ -160,15 +169,25 @@ export const runImageWorkflow = async (
     }
   } catch (error) {
     const failurePhase = phaseForFailure(error, activePhase);
-    const failedRecovery = failurePhase === "write" || failurePhase === "verify"
+    const completedRecovery = completedRecoveryFor(error);
+    const lastRecovery = latestRecovery(recovery, completedRecovery);
+    const failedRecovery = lastRecovery === "target-unchanged" &&
+        (failurePhase === "write" || failurePhase === "verify")
       ? "target-incomplete"
-      : recovery;
+      : lastRecovery;
+    const cleanupFailed = cleanupFailedFor(error);
     operationError = cancellation.signal.aborted
       ? new ImageWorkflowError(failurePhase, failedRecovery, {
           canceled: true,
           cause: error,
+          cleanupFailed,
         })
-      : asImageWorkflowError(error, failurePhase, failedRecovery);
+      : error instanceof ImageWorkflowError
+        ? error
+        : new ImageWorkflowError(failurePhase, failedRecovery, {
+            cause: error,
+            cleanupFailed,
+          });
   } finally {
     wipeSecrets(bootstrapSecrets);
     if (workspace !== undefined) {

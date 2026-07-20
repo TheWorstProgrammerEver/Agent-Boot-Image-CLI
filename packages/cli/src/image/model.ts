@@ -100,6 +100,10 @@ export interface ImageWorkflowDependencies {
   ) => Promise<SynthesizedAssembly>;
   readonly verifyRunnerBundle: (directory: string) => Promise<void>;
   readonly writeImage: (input: {
+    readonly afterVerify: (result: {
+      readonly cancellation: AbortSignal;
+      readonly target: { readonly resolvedTarget: string };
+    }) => Promise<{ readonly filesystemChecks: readonly unknown[] }>;
     readonly cancellation: AbortSignal;
     readonly expectedByteLength: number;
     readonly lockDirectory: string;
@@ -107,6 +111,7 @@ export interface ImageWorkflowDependencies {
     readonly plan: ConfirmedImageTargetPlan;
     readonly source: RepeatableImageSource;
   }) => Promise<{
+    readonly afterVerifyResult: { readonly filesystemChecks: readonly unknown[] };
     readonly bytesVerified: number;
     readonly target: { readonly resolvedTarget: string };
   }>;

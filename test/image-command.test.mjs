@@ -119,7 +119,7 @@ const imageSource = {
   }),
 };
 
-const createHarness = ({ failAt, signalAt } = {}) => {
+const createHarness = ({ failAt, releaseFailure = false, signalAt } = {}) => {
   const events = [];
   const stdout = [];
   const stderr = [];
@@ -165,13 +165,15 @@ const createHarness = ({ failAt, signalAt } = {}) => {
       maybeInterrupt("workspace");
       return workspace;
     },
-    customizeImage: async () => {
+    customizeImage: async input => {
       events.push("customize");
       if (failAt === "customize") throw new ImageCustomizationError("adapter-failed");
       maybeInterrupt("customize");
+      input.cancellation.throwIfAborted();
       events.push("check");
       if (failAt === "check") throw new ImageCustomizationError("filesystem-check-failed");
       maybeInterrupt("check");
+      input.cancellation.throwIfAborted();
       return { filesystemChecks: [{ status: "passed" }, { status: "passed" }] };
     },
     driveInspector: {
@@ -224,19 +226,51 @@ const createHarness = ({ failAt, signalAt } = {}) => {
       events.push("lock");
       if (failAt === "lock") throw new ImageWriteError("lock-failed", "fixture");
       maybeInterrupt("lock");
-      events.push("recheck");
-      input.onProgress({ completed: 0, phase: "unmount", total: 0, unit: "mounts" });
-      if (failAt === "recheck") throw new ImageWriteError("unmount-failed", "fixture");
-      maybeInterrupt("recheck");
-      events.push("write");
-      input.onProgress({ completed: 16, phase: "write", total: 16, unit: "bytes" });
-      if (failAt === "write") throw new ImageWriteError("short-write", "fixture");
-      maybeInterrupt("write");
-      events.push("verify");
-      input.onProgress({ completed: 16, phase: "verify", total: 16, unit: "bytes" });
-      if (failAt === "verify") throw new ImageWriteError("read-back-mismatch", "fixture");
-      maybeInterrupt("verify");
-      return { bytesVerified: 16, target: { resolvedTarget: targetDevice.canonicalPath } };
+      let operationError;
+      let completedPhase;
+      try {
+        input.cancellation.throwIfAborted();
+        events.push("recheck");
+        input.onProgress({ completed: 0, phase: "unmount", total: 0, unit: "mounts" });
+        if (failAt === "recheck") throw new ImageWriteError("unmount-failed", "fixture");
+        maybeInterrupt("recheck");
+        input.cancellation.throwIfAborted();
+        events.push("write");
+        input.onProgress({ completed: 16, phase: "write", total: 16, unit: "bytes" });
+        if (failAt === "write") throw new ImageWriteError("short-write", "fixture");
+        maybeInterrupt("write");
+        input.cancellation.throwIfAborted();
+        events.push("verify");
+        input.onProgress({ completed: 16, phase: "verify", total: 16, unit: "bytes" });
+        if (failAt === "verify") throw new ImageWriteError("read-back-mismatch", "fixture");
+        maybeInterrupt("verify");
+        input.cancellation.throwIfAborted();
+        completedPhase = "verify";
+        const afterVerifyResult = await input.afterVerify({
+          cancellation: input.cancellation,
+          target: { resolvedTarget: targetDevice.canonicalPath },
+        });
+        input.cancellation.throwIfAborted();
+        if (!releaseFailure) {
+          return {
+            afterVerifyResult,
+            bytesVerified: 16,
+            target: { resolvedTarget: targetDevice.canonicalPath },
+          };
+        }
+      } catch (error) {
+        operationError = error;
+        if (!releaseFailure) throw error;
+      } finally {
+        events.push("release");
+      }
+      throw new ImageWriteError("cleanup-failed", "fixture target release failed", {
+        cause: new AggregateError(operationError === undefined
+          ? [new Error("fixture release failure")]
+          : [operationError, new Error("fixture release failure")]),
+        cleanupOnly: operationError === undefined,
+        ...(completedPhase === undefined ? {} : { completedPhase }),
+      });
     },
   };
   const io = {
@@ -253,7 +287,7 @@ test("image workflow executes the exact guarded order and reports only redacted 
   assert.deepEqual(harness.events, [
     "load", "resolve-os", "runner-artifacts", "verify-bundle", "synthesize", "secrets",
     "artifact", "workspace", "publish", "prepare-source", "preflight", "confirm",
-    "lock", "recheck", "write", "verify", "customize", "check", "cleanup",
+    "lock", "recheck", "write", "verify", "customize", "check", "release", "cleanup",
   ]);
   assert.equal(result.targetVerification, "read-back-passed");
   assert.equal(result.filesystemCheckCount, 2);
@@ -301,6 +335,32 @@ test("signals at every phase short-circuit safely and remove the workspace once 
   });
 });
 
+test("a signal aborts pending artifact acquisition instead of waiting for it to settle", async () => {
+  const harness = createHarness();
+  let markStarted;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  harness.dependencies.acquireArtifact = async (_lock, _cache, cancellation) => {
+    harness.events.push("artifact");
+    markStarted();
+    return await new Promise((_resolve, reject) => {
+      cancellation.addEventListener("abort", () => {
+        reject(new Error("fixture acquisition canceled"));
+      }, { once: true });
+    });
+  };
+
+  const pending = runImageWorkflow(request(), harness.io, harness.dependencies);
+  await started;
+  harness.dependencies.signalSource.emit("SIGTERM");
+  await assert.rejects(
+    pending,
+    error => error instanceof ImageWorkflowError && error.canceled,
+  );
+  assert.equal(harness.dependencies.signalSource.listenerCount("SIGTERM"), 0);
+  assert.deepEqual(harness.secretBytes, Buffer.alloc(harness.secretBytes.length));
+  assert.equal(harness.events.includes("workspace"), false);
+});
+
 test("dry-run completes validation and synthesis without reaching any live boundary", async () => {
   const harness = createHarness();
   const result = await runImageWorkflow(request({ dryRun: true }), harness.io, harness.dependencies);
@@ -337,6 +397,100 @@ test("cleanup failure preserves the original verification error first", async ()
       return true;
     },
   );
+});
+
+test("write cleanup failures retain the primary error and verified recovery milestone", async t => {
+  for (const scenario of [
+    {
+      failAt: "verify",
+      name: "verification plus release failure",
+      phase: "verify",
+      recovery: "target-incomplete",
+    },
+    {
+      name: "release-only failure after final checks",
+      phase: "cleanup",
+      recovery: "complete",
+    },
+  ]) await t.test(scenario.name, async () => {
+    const harness = createHarness({ failAt: scenario.failAt, releaseFailure: true });
+    await assert.rejects(
+      runImageWorkflow(request(), harness.io, harness.dependencies),
+      error => {
+        assert.ok(error instanceof ImageWorkflowError);
+        assert.equal(error.cleanupFailed, true);
+        assert.equal(error.phase, scenario.phase);
+        assert.equal(error.recovery, scenario.recovery);
+        assert.ok(error.cause instanceof ImageWriteError);
+        assert.equal(error.cause.code, "cleanup-failed");
+        if (scenario.failAt === "verify") {
+          assert.ok(error.cause.cause instanceof AggregateError);
+          assert.ok(error.cause.cause.errors[0] instanceof ImageWriteError);
+          assert.equal(error.cause.cause.errors[0].code, "read-back-mismatch");
+        }
+        return true;
+      },
+    );
+
+    const cliHarness = createHarness({ failAt: scenario.failAt, releaseFailure: true });
+    assert.equal(
+      await runImageCommand(argumentsFor(), cliHarness.io, cliHarness.dependencies),
+      IMAGE_EXIT_CODE.cleanupFailure,
+    );
+    assert.match(cliHarness.stderr.join("\n"), /cleanup is required/u);
+  });
+});
+
+test("customization cleanup failures retain primary errors and completed checks", async t => {
+  for (const scenario of [
+    {
+      error: new ImageCustomizationError("cleanup-failed", {
+        cause: new AggregateError([
+          new ImageCustomizationError("adapter-failed"),
+          new Error("fixture unmount failure"),
+        ]),
+      }),
+      name: "adapter plus unmount failure",
+      phase: "customize",
+      recovery: "target-verified-needs-customization",
+    },
+    {
+      error: new ImageCustomizationError("cleanup-failed", {
+        cause: new AggregateError([new Error("fixture mount-root removal failure")]),
+        cleanupOnly: true,
+        completedPhase: "check",
+      }),
+      name: "cleanup-only failure after filesystem checks",
+      phase: "cleanup",
+      recovery: "complete",
+    },
+  ]) await t.test(scenario.name, async () => {
+    const harness = createHarness();
+    harness.dependencies.customizeImage = async () => { throw scenario.error; };
+    await assert.rejects(
+      runImageWorkflow(request(), harness.io, harness.dependencies),
+      error => {
+        assert.ok(error instanceof ImageWorkflowError);
+        assert.equal(error.cleanupFailed, true);
+        assert.equal(error.phase, scenario.phase);
+        assert.equal(error.recovery, scenario.recovery);
+        if (!scenario.error.cleanupOnly) {
+          assert.ok(scenario.error.cause instanceof AggregateError);
+          assert.ok(scenario.error.cause.errors[0] instanceof ImageCustomizationError);
+          assert.equal(scenario.error.cause.errors[0].code, "adapter-failed");
+        }
+        return true;
+      },
+    );
+
+    const cliHarness = createHarness();
+    cliHarness.dependencies.customizeImage = async () => { throw scenario.error; };
+    assert.equal(
+      await runImageCommand(argumentsFor(), cliHarness.io, cliHarness.dependencies),
+      IMAGE_EXIT_CODE.cleanupFailure,
+    );
+    assert.match(cliHarness.stderr.join("\n"), /cleanup is required/u);
+  });
 });
 
 test("failure recovery distinguishes untouched, incomplete, and verified media", async () => {

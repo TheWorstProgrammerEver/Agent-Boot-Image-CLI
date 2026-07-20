@@ -59,7 +59,7 @@ export const runImageCommand = async (
       ? error
       : new ImageWorkflowError("preparation", "target-unchanged", { cause: error });
     const cleanup = failure.cleanupFailed
-      ? " Temporary workspace cleanup failed; recovery cleanup is required."
+      ? " Cleanup did not complete; recovery cleanup is required."
       : "";
     io.stderr(
       `Image failed during ${failure.phase}; recovery state: ${failure.recovery}.${cleanup}`,

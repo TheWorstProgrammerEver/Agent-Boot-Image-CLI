@@ -144,7 +144,13 @@ const fakeTransaction = ({
       },
     },
   };
-  const run = plan => writeImageTransaction({
+  const run = (plan, afterVerify) => writeImageTransaction({
+    ...(afterVerify === undefined ? {} : {
+      afterVerify: async result => {
+        assert.equal(locked, true, "post-verification work must retain the target lock");
+        return await afterVerify(result);
+      },
+    }),
     cancellation,
     expectedByteLength,
     plan,
@@ -169,15 +175,23 @@ test("transaction locks, rechecks, narrowly unmounts, writes, verifies, and clea
     onUnmount: async mountpoint => { mounts.delete(mountpoint); },
   });
 
-  const result = await transaction.run(plan);
+  const result = await transaction.run(plan, async ({ target }) => {
+    assert.equal(target.resolvedTarget, "/fixture/target");
+    transaction.events.push("customize");
+    transaction.events.push("check");
+    return "customized";
+  });
   assert.equal(result.bytesWritten, expectedByteLength);
   assert.equal(result.bytesVerified, expectedByteLength);
+  assert.equal(result.afterVerifyResult, "customized");
   assert.deepEqual(transaction.events, [
     "lock",
     "unmount:/media/fixture/nested",
     "unmount:/media/fixture",
     "write",
     "verify",
+    "customize",
+    "check",
     "release",
   ]);
   assert.deepEqual([...mounts], []);
@@ -246,6 +260,25 @@ test("operation and cleanup failures are both preserved", async () => {
     assert.equal(error.code, "cleanup-failed");
     assert.ok(error.cause instanceof AggregateError);
     assert.deepEqual(error.cause.errors, [operationFailure, releaseFailure]);
+    return true;
+  });
+  assert.deepEqual(transaction.events, ["lock", "write", "verify", "release"]);
+});
+
+test("release-only failure reports completed verification without inventing a primary error", async () => {
+  const plan = await confirmedPlan();
+  const releaseFailure = new Error("fixture release failure");
+  const transaction = fakeTransaction({
+    onRelease: async () => { throw releaseFailure; },
+  });
+
+  await assert.rejects(transaction.run(plan, async () => "customized"), error => {
+    assert.ok(error instanceof ImageWriteError);
+    assert.equal(error.code, "cleanup-failed");
+    assert.equal(error.cleanupOnly, true);
+    assert.equal(error.completedPhase, "verify");
+    assert.ok(error.cause instanceof AggregateError);
+    assert.deepEqual(error.cause.errors, [releaseFailure]);
     return true;
   });
   assert.deepEqual(transaction.events, ["lock", "write", "verify", "release"]);

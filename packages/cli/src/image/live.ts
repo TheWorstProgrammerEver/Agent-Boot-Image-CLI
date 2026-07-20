@@ -31,7 +31,6 @@ import type { ImageWorkflowDependencies } from "./model.js";
 import { resolveDefinitionOsLock } from "./os-lock.js";
 import { XzRawImagePreparer } from "./raw-image.js";
 import { loadBootstrapSecrets } from "./secrets.js";
-import { SpawnBoundedExecHost } from "./spawn-bounded-exec.js";
 import { createSystemImageWorkspace } from "./workspace.js";
 
 const unavailable = (): Promise<never> =>
@@ -70,7 +69,6 @@ export const createDryRunImageWorkflowDependencies = (): ImageWorkflowDependenci
 
 export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies => {
   const commands = new NodeSpawnAdapter();
-  const boundedCommands = new SpawnBoundedExecHost(commands);
   const rawImages = new XzRawImagePreparer(commands);
   return {
     ...commonSafeDependencies(),
@@ -78,7 +76,8 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
       cancellation.throwIfAborted();
       const artifact = await acquireOsArtifact(osLock, {
         cacheDirectory,
-        commandHost: boundedCommands,
+        commandHost: commands,
+        cancellation,
       });
       cancellation.throwIfAborted();
       return artifact;
@@ -136,6 +135,7 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
     },
     signalSource: process,
     writeImage: async input => writeImageTransaction({
+      afterVerify: input.afterVerify,
       cancellation: input.cancellation,
       expectedByteLength: input.expectedByteLength,
       onProgress: input.onProgress,

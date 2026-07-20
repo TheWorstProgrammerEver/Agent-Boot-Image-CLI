@@ -101,6 +101,7 @@ const createHarness = async (overrides = {}) => {
         path: root,
         remove: async () => {
           events.push("remove-root");
+          await overrides.onRemove?.();
           removed = true;
           await rm(root, { force: true, recursive: true });
         },
@@ -359,6 +360,30 @@ test("retries failed unmount cleanup without hiding the cleanup failure", async 
     );
     assert.deepEqual(harness.mounted, []);
     assert.equal(harness.isRemoved(), true);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("cleanup-only failure after checks reports a complete target milestone", async () => {
+  const lock = await loadLock();
+  const harness = await createHarness({
+    osLock: lock,
+    onRemove: async () => { throw new Error("fixture mount-root removal failure"); },
+  });
+  try {
+    await assert.rejects(
+      customizeWrittenImage(harness.request, harness.dependencies),
+      error => {
+        assert.ok(error instanceof ImageCustomizationError);
+        assert.equal(error.code, "cleanup-failed");
+        assert.equal(error.cleanupOnly, true);
+        assert.equal(error.completedPhase, "check");
+        return true;
+      },
+    );
+    assert.deepEqual(harness.mounted, []);
+    assert.equal(harness.isRemoved(), false);
   } finally {
     await harness.cleanup();
   }

@@ -9,10 +9,15 @@ export class NativeArtifactTransport implements ArtifactTransport {
     this.#fetch = fetchImplementation;
   }
 
-  async request({ offset, url }: { readonly offset: number; readonly url: string }): Promise<ArtifactResponse> {
+  async request({ cancellation, offset, url }: {
+    readonly cancellation?: AbortSignal;
+    readonly offset: number;
+    readonly url: string;
+  }): Promise<ArtifactResponse> {
     const response = await this.#fetch(url, {
       ...(offset === 0 ? {} : { headers: { Range: `bytes=${String(offset)}-` } }),
       redirect: "manual",
+      ...(cancellation === undefined ? {} : { signal: cancellation }),
     });
     return {
       body: response.body ?? undefined,

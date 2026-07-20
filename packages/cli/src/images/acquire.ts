@@ -1,4 +1,4 @@
-import type { BoundedExecHost } from "@agent-boot/process";
+import type { SpawnHost } from "@agent-boot/process";
 
 import { ArtifactCache } from "./artifact-cache.js";
 import { resolveCatalogArtifact } from "./catalog-resolver.js";
@@ -8,7 +8,8 @@ import { XzMetadataInspector } from "./xz-metadata.js";
 
 export interface AcquireOsArtifactOptions {
   readonly cacheDirectory: string;
-  readonly commandHost: BoundedExecHost;
+  readonly cancellation?: AbortSignal;
+  readonly commandHost: SpawnHost;
   readonly lockPollMs?: number;
   readonly lockTimeoutMs?: number;
   readonly transport?: ArtifactTransport;
@@ -26,5 +27,5 @@ export const acquireOsArtifact = async (
     ...(options.lockTimeoutMs === undefined ? {} : { lockTimeoutMs: options.lockTimeoutMs }),
     transport: options.transport ?? new NativeArtifactTransport(),
   });
-  return cache.acquire(lock);
+  return cache.acquire(lock, options.cancellation);
 };

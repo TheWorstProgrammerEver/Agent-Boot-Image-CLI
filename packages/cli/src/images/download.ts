@@ -1,9 +1,11 @@
 import { open, rm } from "node:fs/promises";
 
 import { ArtifactAcquisitionError } from "./errors.js";
+import { artifactFailure, throwIfArtifactCanceled } from "./cancellation.js";
 import type { ArtifactResponse, ArtifactTransport } from "./model.js";
 
 interface DownloadOptions {
+  readonly cancellation?: AbortSignal;
   readonly expectedByteLength: number;
   readonly offset: number;
   readonly path: string;
@@ -44,9 +46,11 @@ const validateLengthHeader = (response: ArtifactResponse, expected: number): voi
 const writeAll = async (
   handle: Awaited<ReturnType<typeof open>>,
   chunk: Uint8Array,
+  cancellation?: AbortSignal,
 ): Promise<void> => {
   let offset = 0;
   while (offset < chunk.byteLength) {
+    throwIfArtifactCanceled(cancellation);
     const { bytesWritten } = await handle.write(
       chunk,
       offset,
@@ -60,14 +64,20 @@ const writeAll = async (
 
 const responseFor = async (options: DownloadOptions): Promise<ArtifactResponse> => {
   try {
-    return await options.transport.request({ offset: options.offset, url: options.url });
-  } catch {
-    throw new ArtifactAcquisitionError("download-interrupted");
+    return await options.transport.request({
+      ...(options.cancellation === undefined ? {} : { cancellation: options.cancellation }),
+      offset: options.offset,
+      url: options.url,
+    });
+  } catch (error) {
+    throw artifactFailure(error, options.cancellation, "download-interrupted");
   }
 };
 
 export const downloadArtifact = async (options: DownloadOptions): Promise<void> => {
+  throwIfArtifactCanceled(options.cancellation);
   const response = await responseFor(options);
+  throwIfArtifactCanceled(options.cancellation);
   if (response.status >= 300 && response.status < 400) {
     throw new ArtifactAcquisitionError("redirect-rejected");
   }
@@ -97,6 +107,7 @@ export const downloadArtifact = async (options: DownloadOptions): Promise<void> 
   try {
     try {
       for await (const chunk of response.body) {
+        throwIfArtifactCanceled(options.cancellation);
         if (!(chunk instanceof Uint8Array)) {
           throw new ArtifactAcquisitionError("download-interrupted");
         }
@@ -107,14 +118,13 @@ export const downloadArtifact = async (options: DownloadOptions): Promise<void> 
         ) {
           throw new ArtifactAcquisitionError("download-size");
         }
-        await writeAll(handle, chunk);
+        await writeAll(handle, chunk, options.cancellation);
       }
+      throwIfArtifactCanceled(options.cancellation);
       await handle.sync();
     } catch (error) {
       await handle.sync().catch(() => undefined);
-      failure = error instanceof ArtifactAcquisitionError
-        ? error
-        : new ArtifactAcquisitionError("download-interrupted");
+      failure = artifactFailure(error, options.cancellation, "download-interrupted");
     }
   } finally {
     await handle.close();

@@ -25,11 +25,21 @@ const messages: Readonly<Record<ImageCustomizationErrorCode, string>> = {
 
 export class ImageCustomizationError extends Error {
   readonly code: ImageCustomizationErrorCode;
+  readonly cleanupOnly: boolean;
+  readonly completedPhase: "check" | undefined;
 
-  constructor(code: ImageCustomizationErrorCode, options?: ErrorOptions) {
+  constructor(
+    code: ImageCustomizationErrorCode,
+    options: ErrorOptions & {
+      readonly cleanupOnly?: boolean;
+      readonly completedPhase?: "check";
+    } = {},
+  ) {
     super(messages[code], options);
     this.name = "ImageCustomizationError";
     this.code = code;
+    this.cleanupOnly = options.cleanupOnly ?? false;
+    this.completedPhase = options.completedPhase;
   }
 }
 

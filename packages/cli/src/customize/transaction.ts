@@ -30,11 +30,14 @@ const sanitizedError = (
 const cleanupFailure = (
   operationError: ImageCustomizationError | undefined,
   count: number,
+  completedPhase?: "check",
 ): ImageCustomizationError => new ImageCustomizationError("cleanup-failed", {
   cause: new AggregateError([
     ...(operationError === undefined ? [] : [operationError]),
     ...Array.from({ length: count }, () => customizationError("cleanup-failed")),
   ]),
+  cleanupOnly: operationError === undefined,
+  ...(completedPhase === undefined ? {} : { completedPhase }),
 });
 
 const mountPathFor = (root: string, partition: ValidatedImagePartition): string =>
@@ -186,7 +189,9 @@ export const customizeWrittenImage = async (
   }
 
   if (isCanceled() && operationError === undefined) operationError = customizationError("canceled");
-  if (cleanupErrorCount > 0) throw cleanupFailure(operationError, cleanupErrorCount);
+  if (cleanupErrorCount > 0) {
+    throw cleanupFailure(operationError, cleanupErrorCount, result === undefined ? undefined : "check");
+  }
   if (operationError !== undefined) throw operationError;
   if (result === undefined) throw customizationError("adapter-failed");
   return result;
