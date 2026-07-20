@@ -1,6 +1,8 @@
 export type ImageCustomizationErrorCode =
   | "adapter-failed"
   | "canceled"
+  | "capacity-insufficient"
+  | "capacity-provision-failed"
   | "cleanup-failed"
   | "filesystem-check-failed"
   | "invalid-input"
@@ -13,6 +15,8 @@ export type ImageCustomizationErrorCode =
 const messages: Readonly<Record<ImageCustomizationErrorCode, string>> = {
   "adapter-failed": "The image adapter did not complete customization.",
   canceled: "Image customization was canceled.",
+  "capacity-insufficient": "The target lacks capacity for the complete customization plan.",
+  "capacity-provision-failed": "Root filesystem capacity could not be provisioned safely.",
   "cleanup-failed": "Image customization cleanup did not complete.",
   "filesystem-check-failed": "A final read-only filesystem check failed.",
   "invalid-input": "Image customization input is invalid or unsupported.",

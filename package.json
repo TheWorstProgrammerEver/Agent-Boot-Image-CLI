@@ -17,6 +17,7 @@
     "lint": "eslint . --max-warnings 0",
     "pretest": "npm run build",
     "test": "node --test",
+    "test:capacity-loop": "node --test test/integration/capacity-loop.test.mjs",
     "test:non-destructive": "node scripts/run-non-destructive-integration.mjs",
     "typecheck:fixtures": "tsc --project packages/definition/tsconfig.type-tests.json --pretty false && tsc --project examples/tsconfig.json --pretty false",
     "typecheck": "tsc --project tsconfig.typecheck.json --pretty false"

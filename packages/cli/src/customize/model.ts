@@ -29,6 +29,16 @@ export interface ImageFilesystemChecker {
   check(partition: ValidatedImagePartition, cancellation: AbortSignal): Promise<void>;
 }
 
+export interface ImageCapacityProvisionRequest {
+  readonly requiredAdditionalBytes: bigint;
+  readonly rootPartition: ValidatedImagePartition;
+  readonly targetPath: string;
+}
+
+export interface ImageCapacityProvisioner {
+  provision(request: ImageCapacityProvisionRequest, cancellation: AbortSignal): Promise<void>;
+}
+
 export interface PrivateMountRoot {
   readonly path: string;
   remove(): Promise<void>;
@@ -73,6 +83,7 @@ export interface CustomizeWrittenImageRequest {
 
 export interface CustomizeWrittenImageDependencies {
   readonly adapter: ImageCustomizationAdapter;
+  readonly capacityProvisioner?: ImageCapacityProvisioner;
   readonly clock?: PartitionWaitClock;
   readonly filesystemChecker: ImageFilesystemChecker;
   readonly mountHost: ImageMountHost;

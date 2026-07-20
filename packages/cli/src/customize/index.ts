@@ -2,6 +2,11 @@ export { RaspberryPiOsTrixieCustomizationAdapter } from "./adapter.js";
 export type { RaspberryPiOsTrixieCustomizationAdapterOptions } from "./adapter.js";
 export { ImageCustomizationError, type ImageCustomizationErrorCode } from "./errors.js";
 export {
+  CommandImageCapacityProvisioner,
+  parseSfdiskRootGeometry,
+  type CommandImageCapacityProvisionerOptions,
+} from "./capacity-provisioner.js";
+export {
   CommandImageFilesystemChecker,
   type CommandImageFilesystemCheckerOptions,
 } from "./filesystem-checker.js";
@@ -22,6 +27,8 @@ export type {
   CustomizeWrittenImageDependencies,
   CustomizeWrittenImageRequest,
   CustomizeWrittenImageResult,
+  ImageCapacityProvisionRequest,
+  ImageCapacityProvisioner,
   ImageCustomizationAdapter,
   ImageCustomizationAdapterRequest,
   ImageFilesystemChecker,

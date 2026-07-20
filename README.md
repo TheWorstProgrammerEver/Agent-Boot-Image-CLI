@@ -42,3 +42,20 @@ npm run check:boundaries
 
 Routine checks and CI are non-destructive. They do not download images, invoke
 privileged commands, mount filesystems, or access block devices.
+
+The opt-in capacity integration uses only temporary sparse regular files and
+loop devices. It requires root, a checksum-verified pinned image, a synthesized
+assembly, and its verified runner bundle:
+
+```bash
+sudo env \
+  AGENT_BOOT_CAPACITY_LOOP=1 \
+  AGENT_BOOT_PINNED_IMAGE_XZ=/path/to/pinned.img.xz \
+  AGENT_BOOT_ASSEMBLY_DIRECTORY=/path/to/assembly \
+  AGENT_BOOT_RUNNER_BUNDLE_DIRECTORY=/path/to/bundle \
+  npm run test:capacity-loop
+```
+
+The test never accepts a physical-device path from configuration. It creates
+an exact-size image that must fail before planned files appear and an enlarged
+sparse image that must provision root capacity and complete customization.

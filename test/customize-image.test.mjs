@@ -17,6 +17,7 @@ import {
   customizeWrittenImage,
   parsePartitionLsblkJson,
 } from "@agent-boot/cli/customize";
+import { RaspberryPiOsCapacityError } from "@agent-boot/os-adapters";
 import { FakeCommandHost } from "@agent-boot/process";
 
 import {
@@ -71,6 +72,14 @@ const createHarness = async (overrides = {}) => {
         return overrides.adapterResult ?? successResult;
       },
     },
+    ...(overrides.onProvision === undefined ? {} : {
+      capacityProvisioner: {
+        provision: async (request, cancellation) => {
+          events.push("provision");
+          await overrides.onProvision(request, cancellation, signalSource);
+        },
+      },
+    }),
     clock: createClock(),
     filesystemChecker: {
       check: async (partition, cancellation) => {
@@ -135,6 +144,15 @@ const createHarness = async (overrides = {}) => {
   };
 };
 
+const rootCapacityError = () => new RaspberryPiOsCapacityError("root", {
+  availableBlocks: 1n,
+  availableInodes: 1n,
+  blockSize: 4_096n,
+  requiredAdditionalBytes: 128n * 1_024n * 1_024n,
+  requiredBlocks: 40_000n,
+  requiredInodes: 8_000n,
+});
+
 const loadLock = async () => JSON.parse(await readFile(new URL(
   "../packages/os-adapters/fixtures/raspberry-pi-os-lite-trixie-arm64.os-lock.json",
   import.meta.url,
@@ -177,6 +195,62 @@ test("waits for the exact locked partition layout before mounting", async () => 
     assert.deepEqual(harness.mounted, []);
     assert.equal(harness.isRemoved(), true);
     await assert.rejects(stat(harness.root));
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("provisions a larger root offline, revalidates topology, and retries exactly once", async () => {
+  const lock = await loadLock();
+  let adapterCalls = 0;
+  const harness = await createHarness({
+    osLock: lock,
+    onAdapter: async () => {
+      adapterCalls += 1;
+      if (adapterCalls === 1) throw rootCapacityError();
+    },
+    onProvision: async request => {
+      assert.equal(request.rootPartition.role, "root");
+      assert.equal(request.requiredAdditionalBytes, 128n * 1_024n * 1_024n);
+    },
+  });
+  try {
+    await customizeWrittenImage(harness.request, harness.dependencies);
+    assert.deepEqual(harness.events, [
+      "inspect", "mount:boot", "mount:root", "adapter",
+      "unmount:root", "unmount:boot", "provision", "inspect",
+      "mount:boot", "mount:root", "adapter",
+      "unmount:root", "unmount:boot", "check:boot", "check:root", "remove-root",
+    ]);
+    assert.equal(adapterCalls, 2);
+    assert.deepEqual(harness.mounted, []);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("an unprovisionable root fails with no retry and no mounted secret-bearing source", async () => {
+  const lock = await loadLock();
+  let adapterCalls = 0;
+  const harness = await createHarness({
+    osLock: lock,
+    onAdapter: async () => {
+      adapterCalls += 1;
+      throw rootCapacityError();
+    },
+    onProvision: async () => { throw new ImageCustomizationError("capacity-insufficient"); },
+  });
+  try {
+    await assertCustomizationError(
+      customizeWrittenImage(harness.request, harness.dependencies),
+      "capacity-insufficient",
+    );
+    assert.equal(adapterCalls, 1);
+    assert.deepEqual(harness.mounted, []);
+    assert.deepEqual(
+      harness.events.filter(event => event === "provision" || event.startsWith("unmount:")),
+      ["unmount:root", "unmount:boot", "provision"],
+    );
   } finally {
     await harness.cleanup();
   }
