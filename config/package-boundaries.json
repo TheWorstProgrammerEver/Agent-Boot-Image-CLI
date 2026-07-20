@@ -6,7 +6,7 @@
     "definition": ["protocol"],
     "synth": ["assembly", "definition", "protocol"],
     "process": [],
-    "os-adapters": ["protocol"],
+    "os-adapters": ["process", "protocol", "runner-bundle"],
     "os-linux": ["process", "protocol"],
     "runner": ["process", "protocol"],
     "runner-bundle": ["process", "protocol", "runner"],

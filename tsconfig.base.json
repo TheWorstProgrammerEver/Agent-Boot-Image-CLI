@@ -27,6 +27,8 @@
       "@agent-boot/os-adapters/catalog": ["./packages/os-adapters/src/catalog/index.ts"],
       "@agent-boot/process": ["./packages/process/src/index.ts"],
       "@agent-boot/protocol": ["./packages/protocol/src/index.ts"],
+      "@agent-boot/runner": ["./packages/runner/src/index.ts"],
+      "@agent-boot/runner-bundle": ["./packages/runner-bundle/src/index.ts"],
       "@agent-boot/synth": ["./packages/synth/src/index.ts"]
     },
     "useUnknownInCatchVariables": true,

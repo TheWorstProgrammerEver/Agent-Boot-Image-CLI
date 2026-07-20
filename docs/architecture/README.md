@@ -10,8 +10,10 @@ workspace before product behavior is added.
 | `definition` | `protocol` | OS adapters, process implementations, runner |
 | `synth` | `assembly`, `definition`, `protocol` | OS adapters, process implementations, runner |
 | `process` | None | OS adapters and product workflows |
+| `os-adapters` | `process`, `protocol`, `runner-bundle` | Definition evaluation and generic image orchestration |
 | `os-linux` | `process`, `protocol` | Definition evaluation and synthesis |
 | `runner` | `process`, `protocol` | Definition evaluation, assembly I/O, and host OS adapters |
+| `runner-bundle` | `process`, `protocol`, `runner` | Host image orchestration and OS-specific mutation |
 | `cli` | All composition dependencies | N/A; this is the composition root |
 
 `config/package-boundaries.json` is the machine-readable form of this table.
@@ -28,3 +30,5 @@ TypeScript imports against it.
 6. [Separate process adapters](0006-separate-process-adapters.md)
 7. [Versioned assembly protocol compatibility](0007-versioned-assembly-protocol.md)
 8. [Runner-lifetime fire-and-forget processes](0008-fire-and-forget-lifecycle.md)
+9. [Verified private runner bundle and console service](0009-private-runner-bundle.md)
+10. [Raspberry Pi OS Trixie customization boundary](0010-raspberry-pi-os-trixie-adapter.md)

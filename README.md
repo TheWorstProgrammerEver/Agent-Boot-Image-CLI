@@ -14,6 +14,7 @@ in follow-up changes.
 - `@agent-boot/definition`: trusted, host-side definition SDK.
 - `@agent-boot/synth`: provider-neutral definition synthesizer.
 - `@agent-boot/process`: shared process contracts and adapters.
+- `@agent-boot/os-adapters`: curated OS locks and target-specific image customization.
 - `@agent-boot/os-linux`: Linux imaging-host adapters.
 - `@agent-boot/runner`: private on-image runtime.
 - `@agent-boot/runner-bundle`: verified ARM64 Node/runtime and target systemd bundle.
