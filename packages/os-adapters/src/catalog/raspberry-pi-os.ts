@@ -1,4 +1,23 @@
 import type { OsCatalogEntry } from "./schema.js";
+import { deepFreeze } from "./validation.js";
+
+export const RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY = deepFreeze({
+  boot: {
+    commandLineTokens: ["console=serial0,115200", "rootfstype=ext4", "rootwait", "resize"],
+    configLines: ["arm_64bit=1", "[pi5]", "dtoverlay=nospi10"],
+    requiredFiles: ["bcm2712-rpi-5-b.dtb", "kernel_2712.img"],
+  },
+  osRelease: {
+    id: "debian",
+    versionCodename: "trixie",
+    versionId: "13",
+  },
+  raspberryPiIssue: [
+    "Raspberry Pi reference 2026-06-18",
+    "Generated using pi-gen, https://github.com/RPi-Distro/pi-gen, ca8aeed0ae300c2a89f55ce9617d5f96a27e99e5, stage2",
+    "",
+  ].join("\n"),
+} as const);
 
 export const RASPBERRY_PI_OS_LITE_TRIXIE_ARM64: OsCatalogEntry = {
   catalogId: "raspberry-pi-os-lite-trixie-arm64",

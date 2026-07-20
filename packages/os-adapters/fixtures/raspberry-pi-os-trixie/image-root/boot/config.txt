@@ -1,2 +1,6 @@
-[all]
 arm_64bit=1
+
+[pi5]
+dtoverlay=nospi10
+
+[all]

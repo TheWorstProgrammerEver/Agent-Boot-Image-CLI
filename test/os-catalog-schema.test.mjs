@@ -5,6 +5,7 @@ import { URL } from "node:url";
 
 import {
   OsCatalogValidationError,
+  RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY,
   osCatalog,
   osCatalogEntrySchema,
   osCatalogSchema,
@@ -40,6 +41,19 @@ test("the pinned fixture is the catalog's only advertised entry", async () => {
     "acff736ca7945e3b305f07cda4abdb870910e12634991da69783611756e381b3",
   );
   assert.equal(parsed.artifact.byteLength, 524_875_608);
+  assert.deepEqual(RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY.osRelease, {
+    id: "debian",
+    versionCodename: "trixie",
+    versionId: "13",
+  });
+  assert.equal(
+    parsed.operatingSystem.release,
+    `${RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY.osRelease.id}-${RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY.osRelease.versionCodename}`,
+  );
+  assert.match(
+    RASPBERRY_PI_OS_LITE_TRIXIE_MOUNTED_IDENTITY.raspberryPiIssue,
+    new RegExp(`^Raspberry Pi reference ${parsed.publishedAt}$`, "mu"),
+  );
 });
 
 test("catalog validation rejects unknown fields and duplicate identities", async () => {

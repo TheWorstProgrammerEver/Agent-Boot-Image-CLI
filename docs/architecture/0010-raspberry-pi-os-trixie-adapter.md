@@ -20,7 +20,12 @@ routine tests must remain independent of mounts, devices, host accounts, network
 injected discovery contract. Before writing, it verifies the exact curated OS lock, `bootfs` FAT32
 and `rootfs` ext4 labels, canonical Trixie release metadata, every declared assembly asset and
 prompt, the complete runner-bundle manifest, the runner service account, and all existing target
-path components. Both partition plans are preflighted before either plan is applied.
+path components. The pinned artifact's canonical release metadata is `ID=debian`, `VERSION_ID=13`,
+and `VERSION_CODENAME=trixie`. Raspberry Pi identity is checked separately through the artifact's
+exact dated `/etc/rpi-issue` pi-gen marker and required Pi 5 device-tree, kernel, config, and kernel
+command-line markers. The immutable lock remains the provenance boundary; no distribution ID alone
+is treated as proof of Raspberry Pi OS. Both partition plans are preflighted before either plan is
+applied.
 
 The discovery contract also reports filesystem metadata capabilities. The ext4 root must support
 per-entry POSIX metadata. FAT32 cannot, so `bootfs` must instead be mounted with uniform root
