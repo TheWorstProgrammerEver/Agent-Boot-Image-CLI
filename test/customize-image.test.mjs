@@ -60,6 +60,7 @@ const createHarness = async (overrides = {}) => {
   await chmod(root, 0o700);
   const events = [];
   const mounted = [];
+  const mountRoles = new Map();
   const signalSource = new EventEmitter();
   let removed = false;
   const dependencies = {
@@ -80,15 +81,19 @@ const createHarness = async (overrides = {}) => {
     mountHost: {
       mount: async (partition, mountPath, cancellation) => {
         events.push(`mount:${partition.role}`);
+        mountRoles.set(mountPath, partition.role);
         await overrides.onMount?.(partition, mountPath, cancellation, signalSource);
         mounted.push({ mountPath, role: partition.role });
+        await overrides.onMounted?.(partition, mountPath, cancellation, signalSource);
       },
       unmount: async mountPath => {
         const entry = mounted.find(item => item.mountPath === mountPath);
-        assert.ok(entry);
-        events.push(`unmount:${entry.role}`);
-        await overrides.onUnmount?.(entry, signalSource);
-        mounted.splice(mounted.indexOf(entry), 1);
+        const role = mountRoles.get(mountPath);
+        assert.ok(role);
+        events.push(`unmount:${role}`);
+        await overrides.onUnmount?.({ mountPath, role }, signalSource);
+        if (entry !== undefined) mounted.splice(mounted.indexOf(entry), 1);
+        mountRoles.delete(mountPath);
       },
     },
     mountRootFactory: {
@@ -239,7 +244,7 @@ test("adapter, mount, postcondition, and fsck failures clean up in reverse order
       overrides: { onMount: async partition => {
         if (partition.role === "root") throw new Error(secretText);
       } },
-      unmounts: ["unmount:boot"],
+      unmounts: ["unmount:root", "unmount:boot"],
     },
     {
       code: "adapter-failed",
@@ -251,6 +256,17 @@ test("adapter, mount, postcondition, and fsck failures clean up in reverse order
       code: "postcondition-failed",
       name: "postcondition",
       overrides: { adapterResult: { ...successResult, assertions: [] } },
+      unmounts: ["unmount:root", "unmount:boot"],
+    },
+    {
+      code: "postcondition-failed",
+      name: "reported failed postcondition",
+      overrides: {
+        adapterResult: {
+          ...successResult,
+          assertions: [{ id: "reported-failure", path: "/fixture", status: "failed" }],
+        },
+      },
       unmounts: ["unmount:root", "unmount:boot"],
     },
     {
@@ -272,6 +288,45 @@ test("adapter, mount, postcondition, and fsck failures clean up in reverse order
       assert.deepEqual(
         harness.events.filter(event => event.startsWith("unmount:")),
         scenario.unmounts,
+      );
+      assert.deepEqual(harness.mounted, []);
+      assert.equal(harness.isRemoved(), true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+});
+
+test("retains cleanup responsibility when mount acquisition settles ambiguously", async t => {
+  const lock = await loadLock();
+  for (const scenario of [
+    {
+      code: "mount-failed",
+      name: "side effect before failure",
+      onMounted: async partition => {
+        if (partition.role === "root") throw new Error("fixture completion failure");
+      },
+    },
+    {
+      code: "canceled",
+      name: "side effect before cancellation",
+      onMounted: async (partition, _path, _cancellation, signals) => {
+        if (partition.role === "root") {
+          signals.emit("SIGTERM");
+          throw new Error("fixture canceled completion");
+        }
+      },
+    },
+  ]) await t.test(scenario.name, async () => {
+    const harness = await createHarness({ osLock: lock, onMounted: scenario.onMounted });
+    try {
+      await assertCustomizationError(
+        customizeWrittenImage(harness.request, harness.dependencies),
+        scenario.code,
+      );
+      assert.deepEqual(
+        harness.events.filter(event => event.startsWith("unmount:")),
+        ["unmount:root", "unmount:boot"],
       );
       assert.deepEqual(harness.mounted, []);
       assert.equal(harness.isRemoved(), true);

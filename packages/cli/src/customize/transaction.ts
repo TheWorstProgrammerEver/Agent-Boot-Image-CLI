@@ -40,11 +40,22 @@ const cleanupFailure = (
 const mountPathFor = (root: string, partition: ValidatedImagePartition): string =>
   join(root, partition.role);
 
+const isPassingAdapterAssertion = (value: unknown): boolean => {
+  if (typeof value !== "object" || value === null) return false;
+  const assertion = value as Record<string, unknown>;
+  return typeof assertion.id === "string" && assertion.id.length > 0 &&
+    typeof assertion.path === "string" && assertion.path.startsWith("/") &&
+    assertion.status === "passed";
+};
+
 const assertAdapterPostconditions = (
   result: Awaited<ReturnType<CustomizeWrittenImageDependencies["adapter"]["customize"]>>,
 ): void => {
-  if (result.assertions.length === 0 || result.assertions.some(assertion =>
-    assertion.id.length === 0 || !assertion.path.startsWith("/"))) {
+  const runtimeResult: unknown = result;
+  if (typeof runtimeResult !== "object" || runtimeResult === null ||
+      !("assertions" in runtimeResult) || !Array.isArray(runtimeResult.assertions) ||
+      runtimeResult.assertions.length === 0 ||
+      runtimeResult.assertions.some(assertion => !isPassingAdapterAssertion(assertion))) {
     throw customizationError("postcondition-failed");
   }
 };
@@ -70,17 +81,17 @@ export const customizeWrittenImage = async (
     signalSource.on(signal, listener);
   }
 
-  const mounted: MountedCustomizationPartition[] = [];
+  const mountsRequiringCleanup: MountedCustomizationPartition[] = [];
   let mountRoot: PrivateMountRoot | undefined;
   let operationError: ImageCustomizationError | undefined;
   let result: CustomizeWrittenImageResult | undefined;
   let cleanupErrorCount = 0;
 
   const unmountAll = async (): Promise<void> => {
-    for (const partition of [...mounted].reverse()) {
+    for (const partition of [...mountsRequiringCleanup].reverse()) {
       try {
         await dependencies.mountHost.unmount(partition.mountPath, new AbortController().signal);
-        mounted.splice(mounted.indexOf(partition), 1);
+        mountsRequiringCleanup.splice(mountsRequiringCleanup.indexOf(partition), 1);
       } catch {
         cleanupErrorCount += 1;
       }
@@ -108,8 +119,9 @@ export const customizeWrittenImage = async (
       for (const partition of partitions) {
         const mountPath = mountPathFor(mountRoot.path, partition);
         await mkdir(mountPath, { mode: 0o700, recursive: true });
+        // A mount may take effect before its command reports failure or cancellation.
+        mountsRequiringCleanup.push({ ...partition, mountPath });
         await dependencies.mountHost.mount(partition, mountPath, cancellation.signal);
-        mounted.push({ ...partition, mountPath });
         if (isCanceled()) throw customizationError("canceled");
       }
     } catch (error) {
@@ -122,7 +134,7 @@ export const customizeWrittenImage = async (
       adapterResult = await dependencies.adapter.customize({
         assemblyDirectory: request.assemblyDirectory,
         bootstrapSecrets: request.bootstrapSecrets,
-        mountedPartitions: mounted,
+        mountedPartitions: mountsRequiringCleanup,
         osLock,
         runnerBundleDirectory: request.runnerBundleDirectory,
       }, cancellation.signal);
@@ -162,7 +174,7 @@ export const customizeWrittenImage = async (
       : sanitizedError("adapter-failed", cancellation.signal);
   } finally {
     await unmountAll();
-    if (mountRoot !== undefined && mounted.length === 0) {
+    if (mountRoot !== undefined && mountsRequiringCleanup.length === 0) {
       try {
         await mountRoot.remove();
       } catch {
