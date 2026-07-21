@@ -31,11 +31,17 @@ The target layout follows the root contract:
 - `/var/lib/agent-boot` contains the durable checkpoint; and
 - `/run/agent-boot` contains rendered prompts and ephemeral secret inputs.
 
-The system service runs as the configured account, obtains `/dev/tty1` with `tty-force`, sets
-`HOME`, `PATH`, and the working directory explicitly, and declares restart, stop, persistent-state,
-runtime-state, and configuration-directory behavior. Progress is formatted from allowlisted
-structured fields. Automatic, provider, completion-probe, and fire-and-forget output is drained and
-discarded; only manual foreground commands inherit the TTY.
+The system service runs as the configured account after first-user setup, network-online, and SSH
+are available, obtains `/dev/tty1` with `tty-force`, sets `HOME`, `NPM_CONFIG_PREFIX`, `PATH`, and
+the working directory explicitly, and declares restart, stop, persistent-state, runtime-state, and
+configuration-directory behavior. The npm prefix is the account-owned `${HOME}/.local` tree and
+`${HOME}/.local/bin` is first on `PATH`, so provider gates such as Codex install user-owned global
+tools instead of mutating the root-owned private Node runtime. The OS adapter also seeds account
+shell startup files with `${HOME}/.local/bin` and the private runtime `bin` path so an operator can
+SSH in and run installed tools such as `codex` directly. Start limiting is disabled so a transient
+first-boot race cannot permanently suppress the runner before an operator can inspect it over SSH.
+Progress is formatted from allowlisted structured fields. Automatic, provider, completion-probe, and
+fire-and-forget output is drained and discarded; only manual foreground commands inherit the TTY.
 
 ## Consequences
 

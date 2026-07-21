@@ -76,14 +76,11 @@
       "command": {
         "executable": "codex",
         "arguments": [
-          "exec",
           "--profile",
           "agent-boot",
           "--strict-config",
-          "--sandbox",
-          "danger-full-access",
-          "--ask-for-approval",
-          "never",
+          "exec",
+          "--skip-git-repo-check",
           "-"
         ],
         "workingDirectory": {

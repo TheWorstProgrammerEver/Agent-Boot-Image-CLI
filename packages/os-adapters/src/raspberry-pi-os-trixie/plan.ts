@@ -16,6 +16,26 @@ export interface ImagePlans {
 }
 
 const rootIdentity: ImageIdentity = { gid: 0, uid: 0 };
+const networkManagerEnabledState = Buffer.from([
+  "[main]",
+  "NetworkingEnabled=true",
+  "WirelessEnabled=true",
+  "WWANEnabled=true",
+  "",
+].join("\n"), "utf8");
+
+const userShellPathProfile = Buffer.from([
+  "case \":$PATH:\" in",
+  "  *:/opt/agent-boot/runtime/bin:*) ;;",
+  "  *) PATH=\"/opt/agent-boot/runtime/bin:$PATH\" ;;",
+  "esac",
+  "case \":$PATH:\" in",
+  "  *:\"$HOME/.local/bin\":*) ;;",
+  "  *) PATH=\"$HOME/.local/bin:$PATH\" ;;",
+  "esac",
+  "export PATH",
+  "",
+].join("\n"), "utf8");
 
 const relativeTarget = (path: string): string => path.slice(1);
 
@@ -116,10 +136,12 @@ const validateServiceAccount = (
   account: RaspberryPiAccount,
 ): void => {
   const lines = new Set(Buffer.from(contents).toString("utf8").split("\n"));
+  const npmPrefix = `${account.homeDirectory}/.local`;
   for (const expected of [
     `User=${account.username}`,
     `Group=${account.group}`,
     `Environment=HOME=${account.homeDirectory}`,
+    `Environment=NPM_CONFIG_PREFIX=${npmPrefix}`,
     `WorkingDirectory=${account.workingDirectory}`,
     "TTYPath=/dev/tty1",
     "StandardInput=tty-force",
@@ -144,7 +166,9 @@ export const createRootPlan = async (
   for (const entry of bundle.entries) {
     const target = targetPathForBundleEntry(entry.path);
     const path = relativeTarget(target);
-    const identity = accountOwnedBundlePath(target) ? account : rootIdentity;
+    const identity = target === "/etc/agent-boot"
+      ? { gid: account.gid, uid: 0 }
+      : accountOwnedBundlePath(target) ? account : rootIdentity;
     if (entry.kind === "directory") plan.directory(path, Number.parseInt(entry.mode, 8), identity);
     else if (entry.kind === "file") {
       const contents = await bundleFile(entry.path);
@@ -160,6 +184,18 @@ export const createRootPlan = async (
 
   plan.directory(account.homeDirectory.slice(1), 0o750, account);
   plan.directory(account.workingDirectory.slice(1), 0o750, account);
+  plan.directory(`${account.homeDirectory.slice(1)}/.local`, 0o750, account);
+  plan.directory(`${account.homeDirectory.slice(1)}/.local/bin`, 0o750, account);
+  plan.directory(`${account.homeDirectory.slice(1)}/.local/lib`, 0o750, account);
+  plan.directory(`${account.homeDirectory.slice(1)}/.npm`, 0o700, account);
+  plan.file(`${account.homeDirectory.slice(1)}/.profile`, userShellPathProfile, 0o644, account);
+  plan.file(`${account.homeDirectory.slice(1)}/.bashrc`, userShellPathProfile, 0o644, account);
+  plan.file(
+    `${account.homeDirectory.slice(1)}/.npmrc`,
+    Buffer.from(`prefix=${account.homeDirectory}/.local\n`, "utf8"),
+    0o600,
+    account,
+  );
   plan.file("etc/agent-boot/manifest.json", assemblyFile(assembly, "manifest.json"), 0o644, rootIdentity);
   plan.file("etc/agent-boot/plan.json", assemblyFile(assembly, "runner-plan.json"), 0o644, rootIdentity);
   for (const prompt of assembly.documents.manifest.prompts) {
@@ -198,6 +234,7 @@ export const createRootPlan = async (
     rootIdentity,
   );
   plan.file("etc/fstab", protectedBootFstab, 0o644, rootIdentity);
+  plan.file("var/lib/NetworkManager/NetworkManager.state", networkManagerEnabledState, 0o644, rootIdentity);
   plan.link(
     "etc/systemd/system/multi-user.target.wants/agent-boot-runner.service",
     "../agent-boot-runner.service",

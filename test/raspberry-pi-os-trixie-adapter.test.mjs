@@ -74,6 +74,22 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/assets/scripts/prepare")), 0o755);
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/scripts/prepare")), 0o755);
     assert.equal(await mode(join(systemRoot, "home/my-user/.config/agent/config.json")), 0o600);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.local")), 0o750);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.local/bin")), 0o750);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.local/lib")), 0o750);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.npm")), 0o700);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.profile")), 0o644);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.bashrc")), 0o644);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.npmrc")), 0o600);
+    for (const shellProfile of [".profile", ".bashrc"]) {
+      const contents = await readFile(join(systemRoot, `home/my-user/${shellProfile}`), "utf8");
+      assert.match(contents, /\/opt\/agent-boot\/runtime\/bin/u);
+      assert.match(contents, /\$HOME\/\.local\/bin/u);
+    }
+    assert.equal(
+      await readFile(join(systemRoot, "home/my-user/.npmrc"), "utf8"),
+      "prefix=/home/my-user/.local\n",
+    );
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/runtime/bin/node")), 0o755);
     assert.equal(
       await readlink(join(
@@ -89,6 +105,11 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     for (const directive of [
       "User=my-user",
       "Group=my-user",
+      "Environment=NPM_CONFIG_PREFIX=/home/my-user/.local",
+      "Environment=PATH=/home/my-user/.local/bin:/opt/agent-boot/scripts/bin:/opt/agent-boot/runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "Wants=network-online.target ssh.service",
+      "After=local-fs.target userconfig.service network-online.target ssh.service",
+      "StartLimitIntervalSec=0",
       "TTYPath=/dev/tty1",
       "StandardInput=tty-force",
     ]) assert.match(service, new RegExp(`^${directive}$`, "mu"));
@@ -97,6 +118,16 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       /^PasswordAuthentication yes$/mu,
     );
     assert.equal(await readFile(join(systemRoot, "etc/hostname"), "utf8"), "fixture-agent\n");
+    assert.equal(
+      await readFile(join(systemRoot, "var/lib/NetworkManager/NetworkManager.state"), "utf8"),
+      [
+        "[main]",
+        "NetworkingEnabled=true",
+        "WirelessEnabled=true",
+        "WWANEnabled=true",
+        "",
+      ].join("\n"),
+    );
     assert.match(
       await readFile(join(systemRoot, "etc/fstab"), "utf8"),
       /\/boot\/firmware\s+vfat\s+defaults,uid=0,gid=0,fmask=0177,dmask=0077/u,
@@ -107,7 +138,23 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     );
 
     assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "etc/agent-boot")),
+      { gid: 1000, uid: 0 },
+    );
+    assert.deepEqual(
       fixture.ownership.identities.get(join(systemRoot, "etc/agent-boot/bootstrap-secrets/credential")),
+      { gid: 1000, uid: 1000 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "home/my-user/.npmrc")),
+      { gid: 1000, uid: 1000 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "home/my-user/.profile")),
+      { gid: 1000, uid: 1000 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "home/my-user/.bashrc")),
       { gid: 1000, uid: 1000 },
     );
     assert.deepEqual(
