@@ -14,8 +14,7 @@ const execSuccess = stdout => ({ exitCode: 0, signal: null, stderr: "", stdout }
 const descriptor = {
   command: {
     arguments: [
-      "exec", "--profile", "agent-boot", "--strict-config",
-      "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+      "--profile", "agent-boot", "--strict-config", "exec", "--skip-git-repo-check", "-",
     ],
     executable: "codex",
     workingDirectory: { path: "workspace", scope: "user-home" },

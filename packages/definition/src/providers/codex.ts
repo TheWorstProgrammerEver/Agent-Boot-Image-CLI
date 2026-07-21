@@ -50,14 +50,11 @@ const requireExactVersion = (version: string): string => {
 };
 
 const providerArguments = (): readonly string[] => [
-  "exec",
   "--profile",
   CODEX_PROFILE_NAME,
   "--strict-config",
-  "--sandbox",
-  "danger-full-access",
-  "--ask-for-approval",
-  "never",
+  "exec",
+  "--skip-git-repo-check",
   "-",
 ];
 

@@ -238,8 +238,13 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
     );
     const directives = new Set(unit.split("\n"));
     for (const directive of [
+      "Wants=network-online.target ssh.service",
+      "After=local-fs.target userconfig.service network-online.target ssh.service",
+      "StartLimitIntervalSec=0",
       "User=my-user",
       "Group=my-user",
+      "Environment=NPM_CONFIG_PREFIX=/home/my-user/.local",
+      "Environment=PATH=/home/my-user/.local/bin:/opt/agent-boot/scripts/bin:/opt/agent-boot/runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       "Restart=on-failure",
       "StateDirectory=agent-boot",
       "RuntimeDirectory=agent-boot",
@@ -261,8 +266,20 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
     );
     await writeFile(join(targetRoot, "etc", "group"), "root:x:0:\nmy-user:x:1000:\n");
     const unitDirectory = join(targetRoot, "etc", "systemd", "system");
-    for (const target of ["basic.target", "local-fs.target", "multi-user.target", "sysinit.target"]) {
+    for (const target of [
+      "basic.target",
+      "local-fs.target",
+      "multi-user.target",
+      "network-online.target",
+      "sysinit.target",
+    ]) {
       await writeFile(join(unitDirectory, target), `[Unit]\nDescription=Isolated ${target}\n`);
+    }
+    for (const service of ["ssh.service", "userconfig.service"]) {
+      await writeFile(
+        join(unitDirectory, service),
+        `[Unit]\nDescription=Isolated ${service}\n[Service]\nType=oneshot\nExecStart=/bin/true\n`,
+      );
     }
     await writeFile(
       join(unitDirectory, "getty@.service"),

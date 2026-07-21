@@ -6,7 +6,7 @@ import { codexProvider } from "@agent-boot/definition/providers/codex";
 
 const workingRoot = { path: "workspace", scope: "user-home" };
 
-test("manual Codex bootstrap is pinned, ordered, explicit, and permission-complete", () => {
+test("manual Codex bootstrap is pinned, ordered, explicit, and profile-backed", () => {
   const slice = codexProvider({
     authentication: { kind: "manual-device-auth", pollIntervalSeconds: 3 },
     version: "1.2.3",
@@ -37,8 +37,7 @@ test("manual Codex bootstrap is pinned, ordered, explicit, and permission-comple
     step.command.workingDirectory === workingRoot));
   assert.equal(slice.provider.command.workingDirectory, workingRoot);
   assert.deepEqual(slice.provider.command.arguments, [
-    "exec", "--profile", "agent-boot", "--strict-config",
-    "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+    "--profile", "agent-boot", "--strict-config", "exec", "--skip-git-repo-check", "-",
   ]);
 });
 

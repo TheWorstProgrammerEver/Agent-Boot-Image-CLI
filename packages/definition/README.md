@@ -73,6 +73,8 @@ flows before returning the provider descriptor:
 - `manual-device-auth` uses the runner's foreground TTY step with a silent
   `codex login status` completion probe.
 
-The provider invocation selects the verified `agent-boot` profile and also
-passes the `danger-full-access` sandbox and `never` approval policy as concrete
-CLI flags. No prompt text is used to grant first-run permissions.
+The verified `agent-boot` profile grants the provider invocation the
+`danger-full-access` sandbox and `never` approval policy. The invocation selects
+that profile through top-level Codex CLI flags, runs `exec`, and skips the git
+repository check because a first-boot working root may be an empty directory. No
+prompt text is used to grant first-run permissions.
