@@ -30,12 +30,18 @@ digest, and a deterministic aggregate bundle digest. The source-distribution dig
 for the acquiring adapter; the extracted tree digest verifies every byte that is actually shipped.
 
 The systemd unit runs as the configured account with deliberate `HOME`, `PATH`, and working
-directory values. It owns `/dev/tty1` with `StandardInput=tty-force`, routes allowlisted progress to
+directory values. It starts after the local filesystems, first-user setup, NetworkManager, and SSH
+services without waiting for `network-online.target`. It owns `/dev/tty1` with
+`StandardInput=tty-force`, routes allowlisted progress to
 the journal and console, uses explicit restart and stop behavior, and asks systemd to create private
 persistent and ephemeral state directories. Manual commands duplicate the service's tty1 stdin
 onto all three child descriptors; they never inherit the runner's journal-backed stdout or stderr.
 Automatic, provider, completion-probe, and fire-and-forget output is drained and discarded; only
 structured runner progress and constant startup diagnostics reach the unit output.
+
+The OS adapter masks tty1's getty before boot and explicitly enables tty2 as the recovery login
+console. Operators can switch to tty2 locally when runner recovery or journal inspection is needed.
+The runner also maintains a private atomic `service-status.json` beside its resumable checkpoint.
 
 The runtime launcher reads `/etc/agent-boot/manifest.json` and `/etc/agent-boot/plan.json`, verifies
 their shared agent identity, persists checkpoints at `/var/lib/agent-boot/state.json`, hydrates

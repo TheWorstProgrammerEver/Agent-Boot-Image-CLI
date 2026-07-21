@@ -32,8 +32,8 @@ export const renderRunnerService = (account: RunnerServiceAccount): string => {
   return [
     "[Unit]",
     "Description=Agent Boot private runner",
-    "Wants=network-online.target ssh.service",
-    "After=local-fs.target userconfig.service network-online.target ssh.service",
+    "Wants=NetworkManager.service ssh.service",
+    "After=local-fs.target userconfig.service NetworkManager.service ssh.service",
     "Conflicts=getty@tty1.service",
     "Before=getty@tty1.service",
     "StartLimitIntervalSec=0",

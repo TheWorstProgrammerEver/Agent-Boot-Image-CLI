@@ -17,6 +17,7 @@ export const TARGET_PATHS = {
   assets: "/opt/agent-boot/assets",
   runtime: "/opt/agent-boot/runtime",
   scripts: "/opt/agent-boot/scripts",
+  serviceStatus: "/var/lib/agent-boot/service-status.json",
   state: "/var/lib/agent-boot/state.json",
   systemdUnit: `/etc/systemd/system/${RUNNER_SERVICE_NAME}`,
   tty: "/dev/tty1",

@@ -165,7 +165,10 @@ test("packaged launchers resolve only bundled private modules and redact startup
       },
     });
     assert.equal(runner.status, 1);
-    assert.equal(runner.stderr, "agent-boot: runner failed before a terminal checkpoint\n");
+    assert.equal(
+      runner.stderr,
+      "agent-boot: status=runner-startup-failed recovery=inspect-tty2-or-journal\n",
+    );
     assert.doesNotMatch(`${runner.stdout}${runner.stderr}`, /ERR_MODULE_NOT_FOUND|stack|ENOENT/u);
 
     const codex = spawnSync(process.execPath, [join(bin, "agent-boot-codex")], {
@@ -238,8 +241,8 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
     );
     const directives = new Set(unit.split("\n"));
     for (const directive of [
-      "Wants=network-online.target ssh.service",
-      "After=local-fs.target userconfig.service network-online.target ssh.service",
+      "Wants=NetworkManager.service ssh.service",
+      "After=local-fs.target userconfig.service NetworkManager.service ssh.service",
       "StartLimitIntervalSec=0",
       "User=my-user",
       "Group=my-user",
@@ -253,6 +256,7 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
       "StandardOutput=journal+console",
       "StandardError=journal+console",
     ]) assert.equal(directives.has(directive), true, `missing ${directive}`);
+    assert.doesNotMatch(unit, /network-online\.target/u);
     assert.doesNotMatch(unit, /sudo|mount|download|curl|wget/iu);
 
     if (spawnSync("systemd-analyze", ["--version"], { stdio: "ignore" }).status !== 0) {
@@ -270,12 +274,11 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
       "basic.target",
       "local-fs.target",
       "multi-user.target",
-      "network-online.target",
       "sysinit.target",
     ]) {
       await writeFile(join(unitDirectory, target), `[Unit]\nDescription=Isolated ${target}\n`);
     }
-    for (const service of ["ssh.service", "userconfig.service"]) {
+    for (const service of ["NetworkManager.service", "ssh.service", "userconfig.service"]) {
       await writeFile(
         join(unitDirectory, service),
         `[Unit]\nDescription=Isolated ${service}\n[Service]\nType=oneshot\nExecStart=/bin/true\n`,
@@ -293,6 +296,26 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
     assert.equal(verification.status, 0, `${verification.stdout}${verification.stderr}`);
   } finally {
     await fixture.cleanup();
+  }
+});
+
+test("runner service status is private, atomic, and actionable after startup failure", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-service-status-"));
+  try {
+    const { writeRunnerServiceStatus } = await import(
+      "../packages/runner-bundle/dist/runtime/service-status.js"
+    );
+    const path = join(root, "service-status.json");
+    await writeRunnerServiceStatus(path, "starting");
+    await writeRunnerServiceStatus(path, "failed");
+    assert.deepEqual(JSON.parse(await readFile(path, "utf8")), {
+      recovery: "inspect-tty2-or-journal",
+      schemaVersion: 1,
+      status: "failed",
+    });
+    assert.equal((await stat(path)).mode & 0o777, 0o600);
+  } finally {
+    await rm(root, { force: true, recursive: true });
   }
 });
 

@@ -6,7 +6,11 @@ import type {
   RaspberryPiOsCustomizationOptions,
   RaspberryPiOsCustomizationResult,
 } from "./model.js";
-import { assertNetworkConfig, renderNetworkConfig } from "./network-config.js";
+import {
+  assertNetworkConfig,
+  renderNetworkConfig,
+  renderNetworkManagerProfile,
+} from "./network-config.js";
 import { discoverImageRoots } from "./partitions.js";
 import { createRootPlan, renderProtectedBootFstab, validateAccount } from "./plan.js";
 import {
@@ -137,6 +141,9 @@ export const customizeRaspberryPiOsTrixie = async (
     ssid: network.wifi.ssid,
   };
   const networkConfig = wifi === undefined ? undefined : renderNetworkConfig(wifi);
+  const networkManagerProfile = wifi === undefined
+    ? undefined
+    : renderNetworkManagerProfile(wifi);
   const bootEntries = bootPlan(userconf, networkConfig);
   const rootEntries = await createRootPlan(
     inputs.assembly,
@@ -144,6 +151,7 @@ export const customizeRaspberryPiOsTrixie = async (
     (path) => readBundleFile(options.runnerBundleDirectory, path),
     options.account,
     secrets,
+    networkManagerProfile,
     network?.hostname,
     hosts,
     protectedBootFstab,
@@ -165,10 +173,17 @@ export const customizeRaspberryPiOsTrixie = async (
     assertion("account-bootstrap", "/boot/firmware/userconf"),
     assertion("ssh-bootstrap", "/boot/firmware/ssh"),
     ...(wifi === undefined ? [] : [assertion("netplan-v2", "/boot/firmware/network-config")]),
+    ...(wifi === undefined ? [] : [assertion(
+      "network-manager-wifi",
+      "/etc/NetworkManager/system-connections/agent-boot-wifi.nmconnection",
+    )]),
     assertion("runner-layout", "/opt/agent-boot"),
     assertion("runner-documents", "/etc/agent-boot"),
     assertion("bootstrap-secret-modes", "/etc/agent-boot/bootstrap-secrets"),
     assertion("console-service", "/etc/systemd/system/agent-boot-runner.service"),
+    assertion("console-ownership", "/etc/systemd/system/getty@tty1.service"),
+    assertion("recovery-console", "/etc/systemd/system/getty.target.wants/getty@tty2.service"),
+    assertion("persistent-journal", "/etc/systemd/journald.conf.d/20-agent-boot.conf"),
     assertion("service-enabled", "/etc/systemd/system/multi-user.target.wants/agent-boot-runner.service"),
   ];
   return {

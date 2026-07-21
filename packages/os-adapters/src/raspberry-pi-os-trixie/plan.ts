@@ -23,6 +23,14 @@ const networkManagerEnabledState = Buffer.from([
   "WWANEnabled=true",
   "",
 ].join("\n"), "utf8");
+const persistentJournalConfig = Buffer.from([
+  "[Journal]",
+  "Storage=persistent",
+  "SystemMaxUse=64M",
+  "SystemKeepFree=64M",
+  "MaxRetentionSec=7day",
+  "",
+].join("\n"), "utf8");
 
 const userShellPathProfile = Buffer.from([
   "case \":$PATH:\" in",
@@ -158,6 +166,7 @@ export const createRootPlan = async (
   bundleFile: (path: string) => Promise<Uint8Array>,
   account: RaspberryPiAccount,
   secrets: ReadonlyMap<string, Uint8Array>,
+  networkManagerProfile: Uint8Array | undefined,
   hostname: string | undefined,
   hostsContents: Uint8Array,
   protectedBootFstab: Uint8Array,
@@ -235,6 +244,26 @@ export const createRootPlan = async (
   );
   plan.file("etc/fstab", protectedBootFstab, 0o644, rootIdentity);
   plan.file("var/lib/NetworkManager/NetworkManager.state", networkManagerEnabledState, 0o644, rootIdentity);
+  if (networkManagerProfile !== undefined) {
+    plan.file(
+      "etc/NetworkManager/system-connections/agent-boot-wifi.nmconnection",
+      networkManagerProfile,
+      0o600,
+      rootIdentity,
+    );
+  }
+  plan.file(
+    "etc/systemd/journald.conf.d/20-agent-boot.conf",
+    persistentJournalConfig,
+    0o644,
+    rootIdentity,
+  );
+  plan.link("etc/systemd/system/getty@tty1.service", "/dev/null", rootIdentity);
+  plan.link(
+    "etc/systemd/system/getty.target.wants/getty@tty2.service",
+    "/lib/systemd/system/getty@.service",
+    rootIdentity,
+  );
   plan.link(
     "etc/systemd/system/multi-user.target.wants/agent-boot-runner.service",
     "../agent-boot-runner.service",
