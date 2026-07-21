@@ -15,8 +15,7 @@ const success = { exitCode: 0, reason: "exit", signal: null };
 const descriptor = {
   command: {
     arguments: [
-      "exec", "--profile", "agent-boot", "--strict-config",
-      "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+      "--profile", "agent-boot", "--strict-config", "exec", "--skip-git-repo-check", "-",
     ],
     executable: "codex",
     workingDirectory: { path: "workspace", scope: "user-home" },
@@ -103,7 +102,7 @@ test("provider readiness runs before prompt hydration and retries without leakin
   );
   assert.equal(second.status, "succeeded");
   assert.equal(hydrationCalls, 1);
-  assert.equal(host.events.at(-1), "spawn:codex:exec --profile agent-boot --strict-config --sandbox danger-full-access --ask-for-approval never -");
+  assert.equal(host.events.at(-1), "spawn:codex:--profile agent-boot --strict-config exec --skip-git-repo-check -");
 });
 
 test("Codex adapter rejects an implicit working root before consulting readiness", async () => {
@@ -129,7 +128,7 @@ test("Codex adapter rejects an implicit working root before consulting readiness
   assert.equal(gateCalled, false);
 });
 
-test("Codex invocation clears inherited CODEX_HOME and uses concrete permission flags", () => {
+test("Codex invocation clears inherited CODEX_HOME and uses the verified profile", () => {
   const adapter = new CodexProviderAdapter({ ensureReady: async () => undefined });
   const command = adapter.createProcess({
     ...adapterInput,

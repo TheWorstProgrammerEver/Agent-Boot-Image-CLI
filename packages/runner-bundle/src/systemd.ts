@@ -17,7 +17,9 @@ const assertAccount = (account: RunnerServiceAccount): void => {
 
 export const renderRunnerService = (account: RunnerServiceAccount): string => {
   assertAccount(account);
+  const npmPrefix = `${account.homeDirectory}/.local`;
   const path = [
+    `${npmPrefix}/bin`,
     `${TARGET_PATHS.scripts}/bin`,
     `${TARGET_PATHS.runtime}/bin`,
     "/usr/local/sbin",
@@ -30,15 +32,18 @@ export const renderRunnerService = (account: RunnerServiceAccount): string => {
   return [
     "[Unit]",
     "Description=Agent Boot private runner",
-    "After=local-fs.target",
+    "Wants=network-online.target ssh.service",
+    "After=local-fs.target userconfig.service network-online.target ssh.service",
     "Conflicts=getty@tty1.service",
     "Before=getty@tty1.service",
+    "StartLimitIntervalSec=0",
     "",
     "[Service]",
     "Type=exec",
     `User=${account.username}`,
     `Group=${account.group}`,
     `Environment=HOME=${account.homeDirectory}`,
+    `Environment=NPM_CONFIG_PREFIX=${npmPrefix}`,
     `Environment=PATH=${path}`,
     `Environment=AGENT_BOOT_WORKING_DIRECTORY=${account.workingDirectory}`,
     `WorkingDirectory=${account.workingDirectory}`,

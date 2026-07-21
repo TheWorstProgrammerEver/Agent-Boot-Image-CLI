@@ -13,11 +13,11 @@
   "fixtures": [
     {
       "path": "packages/definition/fixtures/definitive-agent/canonical-definition.json",
-      "sha256": "24415850018e62a8a35e0e73ff2d6d1ba0d605a52e375f2c84585e3af7613839"
+      "sha256": "e1639de6a05716935684b99c9d470000ce2fc45c6f686fe8e1143182939def63"
     },
     {
       "path": "packages/protocol/fixtures/definitive-agent/runner-plan.json",
-      "sha256": "17b60882ac1726fda1bbbcba12cc72d935ef102d685451ea91af9ac006207968"
+      "sha256": "56a3d50c292f11f9a948224473a0533f65eee613af771895fd5988e065aca1fe"
     }
   ]
 }

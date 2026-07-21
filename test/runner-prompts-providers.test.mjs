@@ -87,8 +87,7 @@ const providerStep = {
 const codexProvider = {
   command: {
     arguments: [
-      "exec", "--profile", "agent-boot", "--strict-config",
-      "--sandbox", "danger-full-access", "--ask-for-approval", "never", "-",
+      "--profile", "agent-boot", "--strict-config", "exec", "--skip-git-repo-check", "-",
     ],
     executable: "codex",
     workingDirectory: { path: "workspace", scope: "user-home" },

@@ -9,14 +9,11 @@ import { CodexBootstrapError } from "./errors.js";
 import type { CodexReadinessGate } from "./gate.js";
 
 export const codexProviderArguments = (): readonly string[] => [
-  "exec",
   "--profile",
   "agent-boot",
   "--strict-config",
-  "--sandbox",
-  "danger-full-access",
-  "--ask-for-approval",
-  "never",
+  "exec",
+  "--skip-git-repo-check",
   "-",
 ];
 
