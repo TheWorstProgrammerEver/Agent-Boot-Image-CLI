@@ -43,6 +43,10 @@ npm run check:boundaries
 Routine checks and CI are non-destructive. They do not download images, invoke
 privileged commands, mount filesystems, or access block devices.
 
+Generated images retain a tty2 recovery login and the offline `agent-boot-network` utility for
+moving an already-imaged host to another Wi-Fi network. See the
+[local Wi-Fi reconfiguration guide](docs/operator/network-reconfiguration.md).
+
 The opt-in capacity integration uses only temporary sparse regular files and
 loop devices. It requires root, a checksum-verified pinned image, a synthesized
 assembly, and its verified runner bundle:

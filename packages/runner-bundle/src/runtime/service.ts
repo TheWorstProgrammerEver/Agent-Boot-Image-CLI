@@ -14,6 +14,7 @@ import { TARGET_PATHS } from "../paths.js";
 import { RuntimeCommandHost } from "./command-host.js";
 import { createCodexProviderAdapter } from "./codex.js";
 import { formatRunnerProgress } from "./progress.js";
+import { networkRecoveryGuidance } from "./network-recovery.js";
 import { RuntimeSecretResolver } from "./secret-resolver.js";
 import { writeRunnerServiceStatus } from "./service-status.js";
 
@@ -108,6 +109,7 @@ export const runRunnerService = async (): Promise<void> => {
   try {
     await writeRunnerServiceStatus(TARGET_PATHS.serviceStatus, "starting");
     process.stdout.write("agent-boot: status=runner-starting\n");
+    process.stdout.write(await networkRecoveryGuidance());
     const status = await run();
     await writeRunnerServiceStatus(TARGET_PATHS.serviceStatus, status);
     if (status === "failed") process.exitCode = 1;

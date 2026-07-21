@@ -8,8 +8,9 @@ import {
   realpath,
   rename,
   rm,
+  symlink,
 } from "node:fs/promises";
-import { basename, dirname, join, normalize, resolve } from "node:path";
+import { basename, dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RUNNER_CHECKPOINT_SCHEMA_VERSION } from "@agent-boot/runner";
@@ -27,6 +28,7 @@ import { verifyNodeRuntime } from "./node-runtime.js";
 import {
   BUNDLE_MANIFEST_PATH,
   BUNDLE_ROOT_PATH,
+  NETWORK_COMMAND_PATH,
   RUNNER_SERVICE_NAME,
   bundlePathForTarget,
 } from "./paths.js";
@@ -34,6 +36,7 @@ import { renderRunnerService } from "./systemd.js";
 import { bundleEntries, copyTree, inspectTree } from "./tree.js";
 
 const packageNames = ["process", "protocol", "runner", "runner-bundle"] as const;
+const networkLauncherPath = "/opt/agent-boot/scripts/bin/agent-boot-network";
 
 const defaultPackageDirectories = (): Record<(typeof packageNames)[number], string> =>
   Object.fromEntries(packageNames.map((name) => [
@@ -76,6 +79,9 @@ const prepareTargetDirectories = async (root: string): Promise<void> => {
     "/var",
     "/var/lib",
     "/run",
+    "/usr",
+    "/usr/local",
+    "/usr/local/sbin",
   ];
   const privateDirectories = [
     "/etc/agent-boot/bootstrap-secrets",
@@ -120,6 +126,13 @@ const codexLauncher = [
   "",
 ].join("\n");
 
+const networkLauncher = [
+  "#!/opt/agent-boot/runtime/bin/node",
+  'import { runNetworkCommand } from "@agent-boot/runner-bundle/network";',
+  "await runNetworkCommand(process.argv.slice(2));",
+  "",
+].join("\n");
+
 const writeTargetAssets = async (
   root: string,
   options: BuildRunnerBundleOptions,
@@ -148,6 +161,13 @@ const writeTargetAssets = async (
     join(root, "opt", "agent-boot", "scripts", "bin", "agent-boot-codex"),
     codexLauncher,
     0o755,
+  );
+  const privateNetworkLauncher = join(root, ...networkLauncherPath.slice(1).split("/"));
+  const publicNetworkCommand = join(root, ...NETWORK_COMMAND_PATH.slice(1).split("/"));
+  await writeFile(privateNetworkLauncher, networkLauncher, 0o755);
+  await symlink(
+    relative(dirname(publicNetworkCommand), privateNetworkLauncher),
+    publicNetworkCommand,
   );
   await writeFile(
     join(root, "etc", "systemd", "system", RUNNER_SERVICE_NAME),

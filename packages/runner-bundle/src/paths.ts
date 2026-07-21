@@ -3,6 +3,7 @@ import { posix } from "node:path";
 export const BUNDLE_MANIFEST_PATH = "manifest.json";
 export const BUNDLE_ROOT_PATH = "root";
 export const RUNNER_SERVICE_NAME = "agent-boot-runner.service";
+export const NETWORK_COMMAND_PATH = "/usr/local/sbin/agent-boot-network";
 export const TARGET_PATHS = {
   assemblyManifest: "/etc/agent-boot/manifest.json",
   bootstrapSecrets: "/etc/agent-boot/bootstrap-secrets",
@@ -11,6 +12,7 @@ export const TARGET_PATHS = {
   ephemeralPrompts: "/run/agent-boot/prompts",
   ephemeralSecrets: "/run/agent-boot/secrets",
   immutableRoot: "/opt/agent-boot",
+  networkCommand: NETWORK_COMMAND_PATH,
   plan: "/etc/agent-boot/plan.json",
   persistent: "/var/lib/agent-boot",
   prompts: "/opt/agent-boot/prompts",

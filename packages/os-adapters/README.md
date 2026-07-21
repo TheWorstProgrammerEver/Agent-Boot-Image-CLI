@@ -35,7 +35,9 @@ the enabled console service with explicit modes and ownership. Raspberry Pi firs
 bootstrap use `/boot/firmware/userconf` and `/boot/firmware/ssh`; headless Wi-Fi retains cloud-init's
 Netplan v2 `/boot/firmware/network-config` seed and also installs a root-owned `0600` native
 NetworkManager profile that autoconnects on `wlan0`. The adapter masks tty1 getty, enables tty2 as
-the recovery console, and installs bounded persistent journald configuration before first boot.
+the recovery console, installs the offline `agent-boot-network` operator command, and installs
+bounded persistent journald configuration before first boot. The command replaces the same fixed
+profile atomically with root ownership and mode `0600`; network changes do not modify runner state.
 Account password
 hashing uses deliberate stdin through an injected command host, and repeat customization reuses the
 existing SHA-512 crypt salt so the image remains byte-stable.
