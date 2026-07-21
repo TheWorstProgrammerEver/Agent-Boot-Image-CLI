@@ -4,9 +4,9 @@ Date: 2026-07-21
 
 Issue: [RYA-146 - Run approved physical image and first-boot validation](https://linear.app/ryan-hayward/issue/RYA-146/agent-boot-run-approved-physical-image-and-first-boot-validation)
 
-Result: **fresh physical imaging passed from the reviewed merged baseline;
-first-boot validation awaits the required human-assisted hardware boot and
-manual device-auth step.**
+Result: **fresh physical imaging, first boot, manual Codex device auth, prompt
+execution, secret-source cleanup, and post-success reboot validation passed
+from the reviewed merged baseline.**
 
 This record deliberately omits credentials, the approved target's stable
 identifier and serial, the network identity, private operation paths, and
@@ -165,27 +165,51 @@ No secret source content, account password hash, network credential, device-auth
 code, or generated credential output was read or copied. Final inspection left
 zero mounted descendants.
 
-## First-boot validation matrix
+## Live first-boot and reboot validation
 
-No first-boot claim is made from offline image evidence.
+The operator booted the prepared media on supported Raspberry Pi 5 hardware on
+2026-07-21 and completed the required manual Codex device-auth flow without
+recording the device code or credential-bearing output.
+
+The normal Raspberry Pi OS `userconfig.service` failed during boot, but the
+product-owned runner was unaffected. The configured first user already existed,
+SSH became available, and `agent-boot-runner.service` continued through the
+ordered plan. The runner journal then proved:
+
+- Codex install, exact-version verification, profile configuration, and profile
+  verification all succeeded before authentication.
+- The manual `codex-authenticate-device` gate waited, retried, detected manual
+  completion, and then succeeded.
+- The reboot probe, transaction marker installation, bootstrap-mode exit,
+  validation-prompt render, and validation-prompt execution all succeeded.
+- The runner reached terminal `runner-succeeded` and systemd reported
+  `ExecStart=/opt/agent-boot/scripts/bin/agent-boot-runner
+  (code=exited, status=0/SUCCESS)`.
+
+The safe validation output was present with the expected content:
+
+```text
+agent-boot physical validation passed
+```
+
+After the operator rebooted the Pi, SSH returned. The post-success service run
+started, emitted only `runner-starting`, and deactivated successfully in under
+one second with exit status `0`. The terminal validation output still existed,
+`/etc/agent-boot/bootstrap-secrets` contained zero files, and
+`/var/lib/agent-boot` retained the runner state plus bounded service-status
+file.
+
+## First-boot validation matrix
 
 | Required proof | Result |
 | --- | --- |
-| Account and network bootstrap | Prepared and inspected offline; hardware boot pending |
-| Private runtime and service start | Prepared and inspected offline; hardware boot pending |
-| Console progress | tty1/journal routing inspected offline; observation pending |
-| Environment inheritance | Service and shell inputs inspected offline; live proof pending |
-| Manual Codex device authentication | Pending required human interaction |
-| Pre-prompt YOLO gates | Ordered plan/profile inputs inspected offline; live proof pending |
-| Prompt execution | Ordered plan and expected safe output inspected; live proof pending |
-| Secret transaction cleanup | Sole runner source present pre-boot as required; cleanup pending |
-| Interruption and reboot recovery | Non-destructive simulation passed; physical proof pending |
-| Final health/failure observability | Imaging success is bounded and inspectable; boot health pending |
-
-Resume by booting this cleanly unmounted media on supported Raspberry Pi 5
-hardware with tty1 visible. During the manual auth checkpoint, perform one
-controlled runner interruption/restart to prove checkpoint resume without
-replaying completed bootstrap work. Complete device auth without recording the
-device code, allow terminal prompt success, then reboot once and verify terminal
-state persistence, service/journal observability, prompt output, ephemeral
-cleanup, and zero remaining bootstrap-secret sources.
+| Account and network bootstrap | Passed on supported Raspberry Pi 5 hardware; SSH returned before and after terminal success |
+| Private runtime and service start | Passed; systemd started the private runner and observed successful exit |
+| Console progress | Passed through live operator observation and persistent journal output |
+| Environment inheritance | Passed through ordered Codex install/version/profile/auth steps and successful prompt execution |
+| Manual Codex device authentication | Passed after manual device-auth completion; no device code recorded |
+| Pre-prompt YOLO gates | Passed; checked-in plan/profile inputs plus live ordered gates completed before prompt execution |
+| Prompt execution | Passed; expected safe validation output was written |
+| Secret transaction cleanup | Passed; bootstrap secret source was removed and the source directory contained zero files |
+| Interruption and reboot recovery | Passed for post-success physical reboot; earlier checkpoint recovery remains covered by the non-destructive integration suite |
+| Final health/failure observability | Passed; persistent service/journal state, terminal runner state, safe output, and cleanup state were observable after reboot |
