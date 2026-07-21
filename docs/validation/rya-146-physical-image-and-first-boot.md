@@ -17,21 +17,22 @@ confirmation remain in the human Linear comment attached to RYA-146.
 
 - Refreshed RYA-146, its complete comments, and every dependency immediately
   before preparation and again at the destructive boundary.
-- Confirmed RYA-188, RYA-186, RYA-184, RYA-143, and RYA-145 were all `Done`.
+- Confirmed RYA-189, RYA-188, RYA-186, RYA-184, RYA-143, and RYA-145 were all
+  `Done`.
 - Used only merged commit
-  `77103c27695319036cb9e42143d70d3987ff8479`, the independently reviewed
-  RYA-188 baseline explicitly permitted by the reviewer comment.
-- Started from a fresh evidence branch based directly on that commit. The
-  rejected mixed evidence/product branch was preserved but was not used.
+  `3c173b256de35637a3f91f41d13cca29a7f2a3e5`, the independently reviewed
+  RYA-189 merge whose tree is identical to reviewed PR head `8daf4a8`.
+- Rebased the evidence-only branch directly onto that pinned commit. A later,
+  unrelated `main` advance was deliberately excluded from this transaction.
 - Kept the trusted definition, Wi-Fi input, disposable initial password,
   one-time transaction marker, cache, raw transcript, topology, and recovery
   state in a mode-`0700` host-local operation tree. Secret inputs remained
   mode `0600` and their values were never printed.
 
-An initial operator-side topology assertion used `lsblk --raw` for the model
-field and therefore compared the escaped space form rather than the literal
-model. It failed closed before unmount or write. The assertion was corrected to
-use the non-raw model field, then the complete boundary was rerun.
+An initial operator-side size assertion lacked the host's required read
+privilege. It failed closed before the imaging unit was created and before any
+media write. The probe was corrected to use the existing non-interactive root
+boundary, then approval, dependencies, and topology were all refreshed again.
 
 ## Pre-destructive validation
 
@@ -42,8 +43,8 @@ npm ci --ignore-scripts
 npm run check
 npm test
 
-tests 406
-pass 405
+tests 408
+pass 407
 fail 0
 skipped 1 (the explicitly opt-in regular-file/loop capacity test)
 ```
@@ -59,7 +60,7 @@ the dry run or live command.
 
 | Artifact | Verified identity |
 | --- | --- |
-| Product baseline | `77103c27695319036cb9e42143d70d3987ff8479` |
+| Product baseline | `3c173b256de35637a3f91f41d13cca29a7f2a3e5` |
 | Assembly | `assembly-3c222b87a62f2b8f8ca71ce8f084b84a` |
 | OS lock | `raspberry-pi-os-lite-trixie-arm64-2026-06-18` |
 | Raspberry Pi OS XZ SHA-256 | `acff736ca7945e3b305f07cda4abdb870910e12634991da69783611756e381b3` |
@@ -67,8 +68,8 @@ the dry run or live command.
 | Node version | `v24.18.0` LTS `Krypton` |
 | Node distribution SHA-256 | `58c9520501f6ae2b52d5b210444e24b9d0c029a58c5011b797bc1fe7105886f6` |
 | Node extracted-tree SHA-256 | `fe13f28dff3433d6dce353dd7f7da15f146cbca657fe55272c1de0b0b746aa68` |
-| Runner bundle SHA-256 | `ef443d58a3457d06dd9f7d5fde05d549eb0c7649591e2ca36e6f37c8129ec5e4` |
-| Runner manifest-file SHA-256 | `6cf73430a07befb3539c5353137ab0284ec920e8955f9c27645244227139f353` |
+| Runner bundle SHA-256 | `e9ac00bd3c2887701fb0906211a81888bc6c01f66b18260008db45f84e2bfad3` |
+| Runner manifest-file SHA-256 | `ea3f4062233a4c76f51332f5deebbd4ed8f4529cfec1d3483254c03c359e869a` |
 | Runner bundle entries | `5,911` |
 
 The complete `image --dry-run` reproduced the assembly above and reported that
@@ -76,13 +77,10 @@ it accessed no secret, download, command, device, or output-directory boundary.
 
 ## Device topology and guardrails
 
-Before unmount, the active root and boot filesystems were descendants of a
-distinct non-removable system disk. The approved target was a removable,
-USB-attached 128,320,801,792-byte whole disk with two desktop-automounted
-partitions from the preceding diagnostic boot.
-
-Only those two verified target descendants were unmounted. The immediate
-pre-launch recheck then proved:
+The active root and boot filesystems were descendants of a distinct
+non-removable system disk. The approved target was a removable, USB-attached
+128,320,801,792-byte whole disk whose two partitions already had zero mounted
+descendants. The immediate pre-launch recheck then proved:
 
 - the exact approved stable target still resolved to the same whole disk;
 - the active root remained on the distinct system disk;
@@ -135,18 +133,22 @@ OS lock raspberry-pi-os-lite-trixie-arm64-2026-06-18;
 
 Independent `fsck.vfat -n` and `e2fsck -f -n` checks passed after the CLI had
 unmounted the target. The ext4 root reported 31,195,136 total 4 KiB blocks,
-30,141,518 free blocks, and 7,369,270 free inodes.
+30,141,513 free blocks, and 7,369,264 free inodes.
 
 A separate read-only inspection, followed by clean reverse unmount, proved:
 
-- all four first-user boot inputs for account, network, and SSH bootstrap were
+- all three first-user boot inputs for account, network, and SSH bootstrap were
   present without reading credential-bearing contents;
-- NetworkManager state explicitly enabled networking, wireless, and WWAN;
+- NetworkManager state explicitly enabled networking, wireless, and WWAN, and
+  the native root-owned mode-`0600` autoconnect profile was present without
+  reading its credential-bearing contents;
 - the private ARM64 Node runtime and runner entrypoint were executable;
-- the root-owned runner unit was enabled and bound progress to tty1 plus the
-  journal;
-- the unit waited for first-user setup, network-online, and SSH, with start
+- the root-owned runner unit was enabled, bound progress to tty1 plus the
+  journal, and did not depend on `network-online.target`;
+- the unit waited for first-user setup, NetworkManager, and SSH, with start
   limiting disabled;
+- tty1 getty was masked for deterministic runner ownership, tty2 recovery login
+  was enabled, and bounded persistent journaling was configured;
 - the account-local npm prefix and both service and interactive-shell PATH
   inheritance files were present with account ownership;
 - the root-owned manifest and plan, account-traversable configuration
@@ -155,7 +157,9 @@ A separate read-only inspection, followed by clean reverse unmount, proved:
   remained, as required before first boot; and
 - the plan contained the ordered environment, Codex install/version/profile,
   manual device-auth, reboot-probe, secret transaction, bootstrap-mode exit,
-  prompt-render, and provider-execution steps.
+  prompt-render, and provider-execution steps; and
+- the installed verified runtime contained the exact pre-prompt
+  `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` gates.
 
 No secret source content, account password hash, network credential, device-auth
 code, or generated credential output was read or copied. Final inspection left
