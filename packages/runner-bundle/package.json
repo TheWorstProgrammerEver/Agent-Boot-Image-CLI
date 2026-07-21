@@ -12,6 +12,10 @@
     "./runtime": {
       "types": "./dist/runtime/service.d.ts",
       "default": "./dist/runtime/service.js"
+    },
+    "./network": {
+      "types": "./dist/network/index.d.ts",
+      "default": "./dist/network/index.js"
     }
   },
   "files": ["dist", "README.md"],

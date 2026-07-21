@@ -29,10 +29,12 @@ The target layout follows the root contract:
   and assets;
 - `/etc/agent-boot` contains the assembly manifest, runner plan, and temporary bootstrap inputs;
 - `/var/lib/agent-boot` contains the durable checkpoint; and
-- `/run/agent-boot` contains rendered prompts and ephemeral secret inputs.
+- `/run/agent-boot` contains rendered prompts and ephemeral secret inputs; and
+- `/usr/local/sbin/agent-boot-network` provides the offline tty2 network recovery command.
 
-The system service runs as the configured account after first-user setup, network-online, and SSH
-are available, obtains `/dev/tty1` with `tty-force`, sets `HOME`, `NPM_CONFIG_PREFIX`, `PATH`, and
+The system service runs as the configured account after first-user setup, NetworkManager, and SSH
+services start without waiting for `network-online.target`, obtains `/dev/tty1` with `tty-force`,
+sets `HOME`, `NPM_CONFIG_PREFIX`, `PATH`, and
 the working directory explicitly, and declares restart, stop, persistent-state, runtime-state, and
 configuration-directory behavior. The npm prefix is the account-owned `${HOME}/.local` tree and
 `${HOME}/.local/bin` is first on `PATH`, so provider gates such as Codex install user-owned global
@@ -48,5 +50,7 @@ fire-and-forget output is drained and discarded; only manual foreground commands
 - The Raspberry Pi OS adapter places verified bundle entries but does not own runner internals.
 - Bundle tests remain non-destructive and require neither downloads nor executable ARM64 emulation.
 - A Node release change requires new immutable distribution and extracted-tree pins.
+- Wi-Fi recovery replaces only the fixed NetworkManager profile and leaves the durable runner
+  checkpoint intact across networking restarts and host reboots.
 - A future console target, service manager, architecture, or compatibility version requires an
   explicit bundle-format change rather than implicit adapter behavior.

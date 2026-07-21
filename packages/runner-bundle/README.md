@@ -20,6 +20,7 @@ bundle/
     var/lib/agent-boot/
     run/agent-boot/prompts/
     run/agent-boot/secrets/
+    usr/local/sbin/agent-boot-network
 ```
 
 `buildRunnerBundle()` verifies the pinned runtime tree hash, the version and LTS codename embedded
@@ -41,7 +42,11 @@ structured runner progress and constant startup diagnostics reach the unit outpu
 
 The OS adapter masks tty1's getty before boot and explicitly enables tty2 as the recovery login
 console. Operators can switch to tty2 locally when runner recovery or journal inspection is needed.
-The runner also maintains a private atomic `service-status.json` beside its resumable checkpoint.
+The root-only mutation forms of `agent-boot-network` safely prompt for Wi-Fi credentials, atomically
+replace the root-owned `0600` NetworkManager profile, and apply or restart networking without
+touching runner checkpoints. When `wlan0` is not associated, tty1 emits constant guidance to use
+that tty2 path. The runner also maintains a private atomic `service-status.json` beside its
+resumable checkpoint.
 
 The runtime launcher reads `/etc/agent-boot/manifest.json` and `/etc/agent-boot/plan.json`, verifies
 their shared agent identity, persists checkpoints at `/var/lib/agent-boot/state.json`, hydrates

@@ -27,6 +27,7 @@ import { verifyNodeRuntime } from "./node-runtime.js";
 import {
   BUNDLE_MANIFEST_PATH,
   BUNDLE_ROOT_PATH,
+  NETWORK_COMMAND_PATH,
   RUNNER_SERVICE_NAME,
   bundlePathForTarget,
 } from "./paths.js";
@@ -76,6 +77,9 @@ const prepareTargetDirectories = async (root: string): Promise<void> => {
     "/var",
     "/var/lib",
     "/run",
+    "/usr",
+    "/usr/local",
+    "/usr/local/sbin",
   ];
   const privateDirectories = [
     "/etc/agent-boot/bootstrap-secrets",
@@ -120,6 +124,13 @@ const codexLauncher = [
   "",
 ].join("\n");
 
+const networkLauncher = [
+  "#!/opt/agent-boot/runtime/bin/node",
+  'import { runNetworkCommand } from "@agent-boot/runner-bundle/network";',
+  "await runNetworkCommand(process.argv.slice(2));",
+  "",
+].join("\n");
+
 const writeTargetAssets = async (
   root: string,
   options: BuildRunnerBundleOptions,
@@ -147,6 +158,11 @@ const writeTargetAssets = async (
   await writeFile(
     join(root, "opt", "agent-boot", "scripts", "bin", "agent-boot-codex"),
     codexLauncher,
+    0o755,
+  );
+  await writeFile(
+    join(root, ...NETWORK_COMMAND_PATH.slice(1).split("/")),
+    networkLauncher,
     0o755,
   );
   await writeFile(

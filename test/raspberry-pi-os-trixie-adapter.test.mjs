@@ -103,6 +103,7 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       "prefix=/home/my-user/.local\n",
     );
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/runtime/bin/node")), 0o755);
+    assert.equal(await mode(join(systemRoot, "usr/local/sbin/agent-boot-network")), 0o755);
     assert.equal(
       await readlink(join(
         systemRoot,
@@ -202,6 +203,10 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     );
     assert.deepEqual(
       fixture.ownership.identities.get(networkManagerProfilePath),
+      { gid: 0, uid: 0 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "usr/local/sbin/agent-boot-network")),
       { gid: 0, uid: 0 },
     );
     assert.deepEqual(

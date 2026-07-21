@@ -117,6 +117,7 @@ test("runner bundles are reproducible, target-addressable, and mode separated", 
     const entries = new Map(firstManifest.entries.map(entry => [entry.targetPath, entry]));
     assert.equal(entries.get("/opt/agent-boot/runtime/bin/node").mode, "0755");
     assert.equal(entries.get("/opt/agent-boot/scripts/bin/agent-boot-runner").mode, "0755");
+    assert.equal(entries.get("/usr/local/sbin/agent-boot-network").mode, "0755");
     assert.equal(entries.get("/etc/systemd/system/agent-boot-runner.service").mode, "0644");
     assert.equal(entries.get("/etc/agent-boot").mode, "0750");
     assert.equal(entries.get("/etc/agent-boot/bootstrap-secrets").mode, "0700");
