@@ -11,7 +11,11 @@ export {
   calculateImagePlanCapacity,
   preflightImagePlanCapacity,
 } from "./capacity.js";
-export { assertNetworkConfig, renderNetworkConfig } from "./network-config.js";
+export {
+  assertNetworkConfig,
+  renderNetworkConfig,
+  renderNetworkManagerProfile,
+} from "./network-config.js";
 export { OpenSslPasswordHasher } from "./password.js";
 export type {
   ImageIdentity,

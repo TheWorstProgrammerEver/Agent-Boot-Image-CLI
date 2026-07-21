@@ -32,8 +32,11 @@ real-device selection remain outside the adapter.
 The adapter verifies the assembly and private ARM64 runner bundle, then installs their immutable
 assets, target placements, plan, manifest, bootstrap-secret inputs, account-owned state paths, and
 the enabled console service with explicit modes and ownership. Raspberry Pi first-user and SSH
-bootstrap use `/boot/firmware/userconf` and `/boot/firmware/ssh`; headless Wi-Fi uses cloud-init's
-Netplan v2 `/boot/firmware/network-config` seed with the NetworkManager renderer. Account password
+bootstrap use `/boot/firmware/userconf` and `/boot/firmware/ssh`; headless Wi-Fi retains cloud-init's
+Netplan v2 `/boot/firmware/network-config` seed and also installs a root-owned `0600` native
+NetworkManager profile that autoconnects on `wlan0`. The adapter masks tty1 getty, enables tty2 as
+the recovery console, and installs bounded persistent journald configuration before first boot.
+Account password
 hashing uses deliberate stdin through an injected command host, and repeat customization reuses the
 existing SHA-512 crypt salt so the image remains byte-stable.
 

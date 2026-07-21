@@ -18,6 +18,7 @@ import {
   OpenSslPasswordHasher,
   RaspberryPiOsAdapterError,
   customizeRaspberryPiOsTrixie,
+  renderNetworkManagerProfile,
 } from "@agent-boot/os-adapters/raspberry-pi-os-trixie";
 import { FakeCommandHost } from "@agent-boot/process";
 
@@ -62,6 +63,17 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     assert.equal(await mode(join(fixture.boot, "network-config")), 0o600);
     assert.equal(await mode(join(fixture.boot, "userconf")), 0o600);
     assert.equal(await mode(join(fixture.boot, "ssh")), 0o600);
+    const networkManagerProfilePath = join(
+      fixture.systemRoot,
+      "etc/NetworkManager/system-connections/agent-boot-wifi.nmconnection",
+    );
+    assert.equal(await mode(networkManagerProfilePath), 0o600);
+    const networkManagerProfile = await readFile(networkManagerProfilePath, "utf8");
+    assert.match(networkManagerProfile, /^id=agent-boot-wifi$/mu);
+    assert.match(networkManagerProfile, /^interface-name=wlan0$/mu);
+    assert.match(networkManagerProfile, /^autoconnect=true$/mu);
+    assert.match(networkManagerProfile, /^ssid=fixture-network$/mu);
+    assert.match(networkManagerProfile, /^psk=fixture-wifi-passphrase$/mu);
     const userconf = await readFile(join(fixture.boot, "userconf"), "utf8");
     assert.match(userconf, /^my-user:\$6\$fixturesalt\$/u);
     assert.doesNotMatch(userconf, /fixture-account-password/u);
@@ -107,12 +119,39 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       "Group=my-user",
       "Environment=NPM_CONFIG_PREFIX=/home/my-user/.local",
       "Environment=PATH=/home/my-user/.local/bin:/opt/agent-boot/scripts/bin:/opt/agent-boot/runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      "Wants=network-online.target ssh.service",
-      "After=local-fs.target userconfig.service network-online.target ssh.service",
+      "Wants=NetworkManager.service ssh.service",
+      "After=local-fs.target userconfig.service NetworkManager.service ssh.service",
       "StartLimitIntervalSec=0",
       "TTYPath=/dev/tty1",
       "StandardInput=tty-force",
     ]) assert.match(service, new RegExp(`^${directive}$`, "mu"));
+    assert.doesNotMatch(service, /network-online\.target/u);
+    assert.equal(
+      await readlink(join(systemRoot, "etc/systemd/system/getty@tty1.service")),
+      "/dev/null",
+    );
+    assert.equal(
+      await readlink(join(
+        systemRoot,
+        "etc/systemd/system/getty.target.wants/getty@tty2.service",
+      )),
+      "/lib/systemd/system/getty@.service",
+    );
+    assert.equal(
+      await readFile(join(systemRoot, "etc/systemd/journald.conf.d/20-agent-boot.conf"), "utf8"),
+      [
+        "[Journal]",
+        "Storage=persistent",
+        "SystemMaxUse=64M",
+        "SystemKeepFree=64M",
+        "MaxRetentionSec=7day",
+        "",
+      ].join("\n"),
+    );
+    assert.equal(
+      await mode(join(systemRoot, "etc/systemd/journald.conf.d/20-agent-boot.conf")),
+      0o644,
+    );
     assert.match(
       await readFile(join(systemRoot, "etc/ssh/sshd_config.d/20-agent-boot.conf"), "utf8"),
       /^PasswordAuthentication yes$/mu,
@@ -161,6 +200,16 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       fixture.ownership.identities.get(join(systemRoot, "etc/agent-boot/manifest.json")),
       { gid: 0, uid: 0 },
     );
+    assert.deepEqual(
+      fixture.ownership.identities.get(networkManagerProfilePath),
+      { gid: 0, uid: 0 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(
+        join(systemRoot, "etc/systemd/journald.conf.d/20-agent-boot.conf"),
+      ),
+      { gid: 0, uid: 0 },
+    );
     await assert.rejects(readFile(join(systemRoot, "etc/agent-boot/bootstrap-secrets/account-password")));
     await assert.rejects(readFile(join(systemRoot, "etc/agent-boot/bootstrap-secrets/wifi-passphrase")));
 
@@ -175,6 +224,15 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
   } finally {
     await fixture.cleanup();
   }
+});
+
+test("renders NetworkManager keyfile values without line or whitespace injection", () => {
+  const profile = Buffer.from(renderNetworkManagerProfile({
+    passphrase: Buffer.from(" leading\\value\n "),
+    ssid: " fixture\\network\n ",
+  })).toString("utf8");
+  assert.match(profile, /^ssid=\\sfixture\\\\network\\n\\s$/mu);
+  assert.match(profile, /^psk=\\sleading\\\\value\\n\\s$/mu);
 });
 
 test("rejects partition label and shape drift before modifying either root", async t => {

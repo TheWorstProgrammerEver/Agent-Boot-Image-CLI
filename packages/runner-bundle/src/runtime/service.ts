@@ -15,6 +15,7 @@ import { RuntimeCommandHost } from "./command-host.js";
 import { createCodexProviderAdapter } from "./codex.js";
 import { formatRunnerProgress } from "./progress.js";
 import { RuntimeSecretResolver } from "./secret-resolver.js";
+import { writeRunnerServiceStatus } from "./service-status.js";
 
 const parseDocument = async (path: string): Promise<unknown> =>
   JSON.parse(await readFile(path, "utf8")) as unknown;
@@ -105,9 +106,16 @@ const run = async (): Promise<"failed" | "succeeded"> => {
 
 export const runRunnerService = async (): Promise<void> => {
   try {
-    if (await run() === "failed") process.exitCode = 1;
+    await writeRunnerServiceStatus(TARGET_PATHS.serviceStatus, "starting");
+    process.stdout.write("agent-boot: status=runner-starting\n");
+    const status = await run();
+    await writeRunnerServiceStatus(TARGET_PATHS.serviceStatus, status);
+    if (status === "failed") process.exitCode = 1;
   } catch {
-    process.stderr.write("agent-boot: runner failed before a terminal checkpoint\n");
+    await writeRunnerServiceStatus(TARGET_PATHS.serviceStatus, "failed").catch(() => undefined);
+    process.stderr.write(
+      "agent-boot: status=runner-startup-failed recovery=inspect-tty2-or-journal\n",
+    );
     process.exitCode = 1;
   }
 };

@@ -122,10 +122,13 @@ if (realpathNative !== undefined) {
   };
 }
 
-for (const name of ["copyFile", "cp", "link", "rename", "symlink"]) {
+for (const name of ["copyFile", "cp", "link", "rename"]) {
   wrapPathMethod(fs, name, [0, 1]);
   wrapPathMethod(fs, `${name}Sync`, [0, 1]);
 }
+// A symbolic-link target is stored as text and is not accessed by symlink(2).
+wrapPathMethod(fs, "symlink", [1]);
+wrapPathMethod(fs, "symlinkSync", [1]);
 for (const name of ["FileReadStream", "FileWriteStream", "ReadStream", "WriteStream"]) {
   wrapPathConstructor(fs, name);
 }
@@ -161,9 +164,10 @@ for (const name of [
 ]) {
   wrapPathMethod(fs.promises, name);
 }
-for (const name of ["copyFile", "cp", "link", "rename", "symlink"]) {
+for (const name of ["copyFile", "cp", "link", "rename"]) {
   wrapPathMethod(fs.promises, name, [0, 1]);
 }
+wrapPathMethod(fs.promises, "symlink", [1]);
 syncBuiltinESMExports();
 
 process.once("beforeExit", () => {
