@@ -8,8 +8,9 @@ import {
   realpath,
   rename,
   rm,
+  symlink,
 } from "node:fs/promises";
-import { basename, dirname, join, normalize, resolve } from "node:path";
+import { basename, dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RUNNER_CHECKPOINT_SCHEMA_VERSION } from "@agent-boot/runner";
@@ -35,6 +36,7 @@ import { renderRunnerService } from "./systemd.js";
 import { bundleEntries, copyTree, inspectTree } from "./tree.js";
 
 const packageNames = ["process", "protocol", "runner", "runner-bundle"] as const;
+const networkLauncherPath = "/opt/agent-boot/scripts/bin/agent-boot-network";
 
 const defaultPackageDirectories = (): Record<(typeof packageNames)[number], string> =>
   Object.fromEntries(packageNames.map((name) => [
@@ -160,10 +162,12 @@ const writeTargetAssets = async (
     codexLauncher,
     0o755,
   );
-  await writeFile(
-    join(root, ...NETWORK_COMMAND_PATH.slice(1).split("/")),
-    networkLauncher,
-    0o755,
+  const privateNetworkLauncher = join(root, ...networkLauncherPath.slice(1).split("/"));
+  const publicNetworkCommand = join(root, ...NETWORK_COMMAND_PATH.slice(1).split("/"));
+  await writeFile(privateNetworkLauncher, networkLauncher, 0o755);
+  await symlink(
+    relative(dirname(publicNetworkCommand), privateNetworkLauncher),
+    publicNetworkCommand,
   );
   await writeFile(
     join(root, "etc", "systemd", "system", RUNNER_SERVICE_NAME),
