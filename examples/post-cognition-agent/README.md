@@ -66,7 +66,9 @@ Runner checkpoints prevent already-succeeded steps from replaying. An
 interrupted automatic attempt is treated as ambiguous and consumes that
 attempt, so every deterministic script is also authored to be idempotent. Repo
 sync refuses local changes, skill installation records its completed revision,
-config replacement is atomic, and the systemd installer is safe to rerun.
+config replacement validates the candidate TOML and leaves the original file
+unchanged when the narrow example updater encounters an unsupported form, and
+the systemd installer is safe to rerun.
 
 Failures retain the step ID, attempt, exit status or signal, and recovery
 classification in mode-`0600` runner state and progress events. Command output,

@@ -165,5 +165,25 @@ trap cleanup EXIT
 } >"$temporary"
 
 chmod 0600 "$temporary"
+if ! python3 -c 'import tomllib' >/dev/null 2>&1; then
+  printf '%s\n' \
+    'Cannot validate interactive Codex config: Python tomllib is unavailable; original config left unchanged. Install Python 3.11 or later and retry.' >&2
+  exit 1
+fi
+if ! python3 - "$temporary" 2>/dev/null <<'PYTHON'
+import sys
+import tomllib
+
+try:
+    with open(sys.argv[1], "rb") as candidate:
+        tomllib.load(candidate)
+except (OSError, tomllib.TOMLDecodeError):
+    raise SystemExit(1) from None
+PYTHON
+then
+  printf '%s\n' \
+    'Generated interactive Codex config is invalid; original config left unchanged. Resolve unsupported TOML manually and retry.' >&2
+  exit 1
+fi
 mv "$temporary" "$config_file"
 trap - EXIT

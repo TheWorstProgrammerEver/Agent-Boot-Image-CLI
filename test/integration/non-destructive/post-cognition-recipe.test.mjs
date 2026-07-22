@@ -199,6 +199,56 @@ test("interactive Codex config edit normalizes quoted top-level keys", async () 
   }
 });
 
+test("interactive Codex config edit rejects unsupported TOML without replacement", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-interactive-config-"));
+  const home = join(root, "home", "my-user");
+  const configDirectory = join(home, ".codex");
+  const config = join(configDirectory, "config.toml");
+  const script = join(
+    repositoryRoot,
+    "examples",
+    "post-cognition-agent",
+    "scripts",
+    "configure-interactive-codex.sh",
+  );
+  const original = Buffer.from([
+    'approval_policy.custom = "on-request"',
+    'sandbox_mode = "workspace-write"',
+    "",
+  ].join("\n"));
+
+  try {
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(config, original, { mode: 0o640 });
+    await execFileAsync("python3", [
+      "-c",
+      "import sys, tomllib; tomllib.load(open(sys.argv[1], 'rb'))",
+      config,
+    ]);
+
+    await assert.rejects(
+      execFileAsync("bash", [script], {
+        env: { ...process.env, HOME: home },
+      }),
+      error => {
+        assert.equal(error.code, 1);
+        assert.equal(error.stdout, "");
+        assert.match(
+          error.stderr,
+          /Generated interactive Codex config is invalid; original config left unchanged\. Resolve unsupported TOML manually and retry\./u,
+        );
+        return true;
+      },
+    );
+
+    assert.deepEqual(await readFile(config), original);
+    assert.equal((await stat(config)).mode & 0o777, 0o640);
+    assert.deepEqual(await readdir(configDirectory), ["config.toml"]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("authored post-cognition recipe orders, resumes, and redacts setup", async () => {
   const fixture = await createPostCognitionFixture();
   const runtime = {
