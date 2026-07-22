@@ -92,7 +92,9 @@ trap cleanup EXIT
     BEGIN { quote = sprintf("%c", 39) }
     !in_table && value_depth == 0 && !in_multiline_basic &&
       !in_multiline_literal && /^[[:space:]]*\[/ { in_table = 1 }
-    !in_table && /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ { next }
+    !in_table && value_depth == 0 && !in_multiline_basic &&
+      !in_multiline_literal &&
+      /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ { next }
     {
       print
       if (!in_table) {
