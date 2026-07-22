@@ -213,3 +213,9 @@ file.
 | Secret transaction cleanup | Passed; bootstrap secret source was removed and the source directory contained zero files |
 | Interruption and reboot recovery | Passed for post-success physical reboot; earlier checkpoint recovery remains covered by the non-destructive integration suite |
 | Final health/failure observability | Passed; persistent service/journal state, terminal runner state, safe output, and cleanup state were observable after reboot |
+
+Evidence boundary: this run did not stop and restart the live service while the
+manual-auth gate was pending. That transient checkpoint remains tracked by
+[RYA-195](https://linear.app/ryan-hayward/issue/RYA-195/agent-boot-prove-live-manual-auth-checkpoint-interruption-and-resume)
+and is not part of the supported release claim. The table's interruption result
+means simulated checkpoint recovery plus the physical post-success reboot only.

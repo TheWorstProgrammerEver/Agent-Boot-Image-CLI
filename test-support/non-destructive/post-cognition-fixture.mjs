@@ -27,9 +27,9 @@ const definitionModuleUrl = pathToFileURL(join(
 )).href;
 
 export const POST_COGNITION_REVISIONS = {
-  github: "6991bf1d5071b64d1c51d7627935d39db180863c",
-  maintainer: "205e55df07046e5b0d1b654f929c38cea30bdce8",
-  skills: "fd9623d030228431de345dbff770b21e474a81e2",
+  github: "2222222222222222222222222222222222222222",
+  maintainer: "3333333333333333333333333333333333333333",
+  skills: "1111111111111111111111111111111111111111",
 };
 
 const sensitiveValues = () => {

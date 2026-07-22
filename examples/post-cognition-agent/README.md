@@ -4,6 +4,11 @@ This representative definition proves that per-agent setup can remain an
 ordered recipe. It does not require a hard-coded post-cognition phase or a
 special `config.toml` primitive.
 
+All repository URLs, commit revisions, identities, and credential filenames in
+this example are illustrative. Replace them with reviewed deployment values in
+a private copy. The `example-org` repositories do not represent release
+artifacts and the repeated-digit revisions are intentionally fake.
+
 ## Sequence shape
 
 The definition deliberately places every setup action after

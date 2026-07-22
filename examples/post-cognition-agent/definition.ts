@@ -15,13 +15,13 @@ import {
   setEnvironment,
 } from "@agent-boot/definition";
 
-const CODEX_SKILLS_REVISION = "fd9623d030228431de345dbff770b21e474a81e2";
-const GITHUB_HELPERS_REVISION = "6991bf1d5071b64d1c51d7627935d39db180863c";
-const MIND_MAINTAINER_REVISION = "205e55df07046e5b0d1b654f929c38cea30bdce8";
+const CODEX_SKILLS_REVISION = "1111111111111111111111111111111111111111";
+const GITHUB_HELPERS_REVISION = "2222222222222222222222222222222222222222";
+const MIND_MAINTAINER_REVISION = "3333333333333333333333333333333333333333";
 const SETUP_REPOSITORY =
-  "https://github.com/TheWorstProgrammerEver/Codex-Agent-Setup.git";
+  "https://github.com/example-org/agent-setup.git";
 const SKILLS_REPOSITORY =
-  "https://github.com/TheWorstProgrammerEver/codex-skills.git";
+  "https://github.com/example-org/agent-skills.git";
 
 const accountAuthentication = secret(
   "account-authentication",

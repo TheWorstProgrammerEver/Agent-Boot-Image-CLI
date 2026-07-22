@@ -1,4 +1,5 @@
 import {
+  automatic,
   codexProvider,
   command,
   curatedOperatingSystem,
@@ -10,6 +11,7 @@ import {
   promptVariable,
   renderPrompt,
   runProvider,
+  script,
   secret,
   setEnvironment,
   unsetEnvironment,
@@ -26,6 +28,14 @@ const networkAuthentication = secret(
 const repositoryCredential = secret(
   "repository-credential",
   "./secrets/repository-credential",
+);
+const prepareWorkspace = script(
+  "prepare-workspace",
+  "./scripts/prepare-workspace.sh",
+);
+const verifyBootstrap = script(
+  "verify-bootstrap",
+  "./scripts/verify-bootstrap.sh",
 );
 const bootstrapPrompt = prompt(
   "bootstrap-agent",
@@ -59,6 +69,7 @@ export default defineAgent({
     setEnvironment("set-agent-name", "AGENT_NAME", "My Agent"),
     setEnvironment("enter-bootstrap-mode", "BOOTSTRAP_MODE", "true"),
     ...codex.bootstrapSteps,
+    automatic("prepare-workspace", command(prepareWorkspace)),
     fireAndForget(
       "start-agent-support-service",
       command("agent-support-service", ["--foreground"]),
@@ -73,5 +84,6 @@ export default defineAgent({
       promptVariable("agent-name", fromEnvironment("AGENT_NAME")),
     ]),
     runProvider("run-codex-bootstrap", codex.provider, "bootstrap-prompt"),
+    automatic("verify-codex-bootstrap", command(verifyBootstrap)),
   ],
 });

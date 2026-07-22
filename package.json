@@ -11,8 +11,9 @@
   },
   "scripts": {
     "build": "tsc --build --pretty false",
-    "check": "npm run lint && npm run typecheck && npm run typecheck:fixtures && npm run check:boundaries",
+    "check": "npm run lint && npm run typecheck && npm run typecheck:fixtures && npm run check:boundaries && npm run check:docs",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
+    "check:docs": "node scripts/check-docs-release.mjs",
     "clean": "tsc --build --clean",
     "lint": "eslint . --max-warnings 0",
     "pretest": "npm run build",

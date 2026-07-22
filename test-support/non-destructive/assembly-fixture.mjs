@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL, URL } from "node:url";
 
@@ -27,6 +27,9 @@ export const createDefinitiveDefinition = async root => {
     mkdir(promptDirectory, { recursive: true }),
     mkdir(secretDirectory, { recursive: true }),
   ]);
+  await cp(join(exampleRoot, "scripts"), join(directory, "scripts"), {
+    recursive: true,
+  });
 
   const source = (await readFile(join(exampleRoot, "definition.ts"), "utf8"))
     .replace('from "@agent-boot/definition";', `from ${JSON.stringify(definitionModuleUrl)};`);
