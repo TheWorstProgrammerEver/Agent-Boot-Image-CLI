@@ -9,6 +9,7 @@ import {
 } from "@agent-boot/protocol";
 
 import { SynthesisError } from "./errors.js";
+import { validatePromptTemplateVariables } from "./prompt-template-validation.js";
 import type { CollectedSourceFiles } from "./source-files.js";
 
 export const sha256 = (contents: Uint8Array): string =>
@@ -87,9 +88,10 @@ export const createResourceFiles = (
       { scope: "system", path: `opt/agent-boot/scripts/${script.id}` },
     ));
   }
-  for (const prompt of definition.prompts) {
+  for (const [index, prompt] of definition.prompts.entries()) {
     const contents = collected.prompts.get(prompt.id);
     if (contents === undefined) throw new SynthesisError("operational", "A prompt was not collected.");
+    validatePromptTemplateVariables(prompt, contents, `$.prompts[${String(index)}].source.url`);
     const path = `${ASSEMBLY_PATHS.prompts}/${prompt.id}`;
     files.push({ path, contents, mode: 0o644 });
     prompts.push({ id: prompt.id, path, sha256: sha256(contents), variables: prompt.variables });
