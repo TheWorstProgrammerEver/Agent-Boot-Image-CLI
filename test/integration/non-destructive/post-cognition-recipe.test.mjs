@@ -125,6 +125,73 @@ test("interactive Codex config edit preserves multiline values and profile overr
   }
 });
 
+test("interactive Codex config edit normalizes quoted top-level keys", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-interactive-config-"));
+  const script = join(
+    repositoryRoot,
+    "examples",
+    "post-cognition-agent",
+    "scripts",
+    "configure-interactive-codex.sh",
+  );
+  const scenarios = [
+    {
+      name: "basic-quoted",
+      ownedKeys: [
+        '"approval_policy" = "on-request"',
+        '"sandbox_mode" = "workspace-write"',
+      ],
+    },
+    {
+      name: "literal-quoted",
+      ownedKeys: [
+        "'approval_policy' = 'on-request'",
+        "'sandbox_mode' = 'workspace-write'",
+      ],
+    },
+  ];
+
+  try {
+    for (const scenario of scenarios) {
+      const home = join(root, scenario.name, "home", "my-user");
+      const config = join(home, ".codex", "config.toml");
+      await mkdir(dirname(config), { recursive: true });
+      await writeFile(config, [
+        'personality = "pragmatic"',
+        ...scenario.ownedKeys,
+        "",
+        "[profiles.safe]",
+        'approval_policy = "on-request"',
+        'sandbox_mode = "read-only"',
+        "",
+      ].join("\n"));
+
+      await execFileAsync("bash", [script], {
+        env: { ...process.env, HOME: home },
+      });
+      await execFileAsync("python3", [
+        "-c",
+        "import sys, tomllib; tomllib.load(open(sys.argv[1], 'rb'))",
+        config,
+      ]);
+
+      assert.equal(await readFile(config, "utf8"), [
+        'approval_policy = "never"',
+        'sandbox_mode = "danger-full-access"',
+        'personality = "pragmatic"',
+        "",
+        "[profiles.safe]",
+        'approval_policy = "on-request"',
+        'sandbox_mode = "read-only"',
+        "",
+      ].join("\n"));
+      assert.equal((await stat(config)).mode & 0o777, 0o600);
+    }
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("authored post-cognition recipe orders, resumes, and redacts setup", async () => {
   const fixture = await createPostCognitionFixture();
   const runtime = {

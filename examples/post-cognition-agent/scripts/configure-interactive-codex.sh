@@ -35,6 +35,12 @@ trap cleanup EXIT
       return cursor - 1
     }
 
+    function is_owned_key_assignment(line) {
+      return line ~ /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ ||
+        line ~ /^[[:space:]]*"(approval_policy|sandbox_mode)"[[:space:]]*=/ ||
+        line ~ ("^[[:space:]]*" quote "(approval_policy|sandbox_mode)" quote "[[:space:]]*=")
+    }
+
     function scan_value(line,    character, cursor, in_basic, in_literal, next_three) {
       for (cursor = 1; cursor <= length(line); cursor++) {
         character = substr(line, cursor, 1)
@@ -94,7 +100,7 @@ trap cleanup EXIT
       !in_multiline_literal && /^[[:space:]]*\[/ { in_table = 1 }
     !in_table && value_depth == 0 && !in_multiline_basic &&
       !in_multiline_literal &&
-      /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ { next }
+      is_owned_key_assignment($0) { next }
     {
       print
       if (!in_table) {
