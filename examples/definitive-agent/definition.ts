@@ -4,7 +4,6 @@ import {
   command,
   curatedOperatingSystem,
   defineAgent,
-  fireAndForget,
   fromEnvironment,
   installUserSecret,
   prompt,
@@ -70,10 +69,6 @@ export default defineAgent({
     setEnvironment("enter-bootstrap-mode", "BOOTSTRAP_MODE", "true"),
     ...codex.bootstrapSteps,
     automatic("prepare-workspace", command(prepareWorkspace)),
-    fireAndForget(
-      "start-agent-support-service",
-      command("agent-support-service", ["--foreground"]),
-    ),
     installUserSecret(
       "install-repository-credential",
       repositoryCredential,

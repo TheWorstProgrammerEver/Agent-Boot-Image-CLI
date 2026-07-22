@@ -71,6 +71,55 @@ test("public definition scripts pass shell syntax validation", () => {
   }
 });
 
+test("public deterministic recipe scripts execute against documented artifacts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-docs-runtime-"));
+  try {
+    const home = join(root, "home", "my-user");
+    await mkdir(join(home, ".config", "repository"), { recursive: true });
+    const environment = { ...process.env, HOME: home };
+    const prepare = spawnSync(
+      "bash",
+      [join(exampleSource, "scripts", "prepare-workspace.sh")],
+      { encoding: "utf8", env: environment },
+    );
+    assert.equal(prepare.status, 0, prepare.stderr);
+
+    await Promise.all([
+      writeFile(
+        join(home, "workspace", "bootstrap-report.txt"),
+        "agent bootstrap verified\n",
+        { mode: 0o600 },
+      ),
+      writeFile(
+        join(home, ".config", "repository", "credential"),
+        "fake-repository-credential",
+        { mode: 0o600 },
+      ),
+    ]);
+    const verify = spawnSync(
+      "bash",
+      [join(exampleSource, "scripts", "verify-bootstrap.sh")],
+      { encoding: "utf8", env: environment },
+    );
+    assert.equal(verify.status, 0, verify.stderr);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("operator guide embeds the exact maintained public definition", async () => {
+  const operatorGuide = await readFile(
+    join(repositoryRoot, "docs", "operator", "README.md"),
+    "utf8",
+  );
+  const documentedDefinition = operatorGuide.match(/```ts\n([\s\S]*?)\n```/u)?.[1];
+  assert.ok(documentedDefinition, "operator guide is missing its TypeScript definition");
+  assert.equal(
+    `${documentedDefinition}\n`,
+    await readFile(join(exampleSource, "definition.ts"), "utf8"),
+  );
+});
+
 test("documented CLI flags agree with executable usage output", async () => {
   const lines = [];
   const io = {
@@ -118,6 +167,8 @@ test("public definition validates and synthesizes with synthetic operator inputs
     assert.ok(stepIds.indexOf("codex-authenticate-device") < stepIds.indexOf("prepare-workspace"));
     assert.ok(stepIds.indexOf("prepare-workspace") < stepIds.indexOf("run-codex-bootstrap"));
     assert.ok(stepIds.indexOf("run-codex-bootstrap") < stepIds.indexOf("verify-codex-bootstrap"));
+    assert.ok(assembly.documents.runnerPlan.steps.every(step => step.kind !== "fire-and-forget"));
+    assert.equal(stepIds.includes("start-agent-support-service"), false);
     assert.equal(assembly.documents.osLock.catalogId, "raspberry-pi-os-lite-trixie-arm64-2026-06-18");
     assert.doesNotMatch(
       JSON.stringify(assembly.documents),

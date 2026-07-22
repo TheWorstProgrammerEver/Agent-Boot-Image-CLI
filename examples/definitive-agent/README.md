@@ -17,10 +17,10 @@ mode `0600`; do not commit them:
 
 The sequence performs deterministic Codex installation, profile verification,
 and manual device authentication before any authored setup. It then prepares
-the workspace with an idempotent shell script, starts an illustrative support
-process, transactionally installs the repository credential, renders a prompt
-whose declared `agent-name` variable matches `{{agent-name}}`, runs Codex, and
-uses a deterministic shell step to verify the provider result.
+the workspace with an idempotent shell script, transactionally installs the
+repository credential, renders a prompt whose declared `agent-name` variable
+matches `{{agent-name}}`, runs Codex, and uses a deterministic shell step to
+verify the provider result.
 
 Use deterministic `automatic()` commands, `script()` resources,
 `installUserSecret()`, and `manual()` gates for setup that should be inspectable

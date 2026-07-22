@@ -11,8 +11,10 @@ host permissions. Obtain it from a reviewed revision, inspect its complete
 import graph, and keep it in a private operator directory. The target receives
 the synthesized assembly, not the TypeScript source.
 
-Copy the [validated public example](../../examples/definitive-agent/definition.ts)
-with its prompt and scripts. This condensed pattern shows the required shape:
+Copy the complete [validated public example](../../examples/definitive-agent/README.md),
+including its prompt and scripts. The definition below is the exact maintained
+`definition.ts`; release validation keeps this block synchronized with the
+example that compiles, validates, and synthesizes in CI:
 
 ```ts
 import {
@@ -30,14 +32,34 @@ import {
   script,
   secret,
   setEnvironment,
+  unsetEnvironment,
 } from "@agent-boot/definition";
 
-const accountPassword = secret("account-authentication", "./secrets/account-authentication");
-const wifiPassphrase = secret("network-authentication", "./secrets/network-authentication");
-const serviceCredential = secret("service-credential", "./secrets/service-credential");
-const prepare = script("prepare-workspace", "./scripts/prepare-workspace.sh");
-const verify = script("verify-bootstrap", "./scripts/verify-bootstrap.sh");
-const audit = prompt("audit-bootstrap", "./prompts/audit-bootstrap.md", ["agent-name"]);
+const accountAuthentication = secret(
+  "account-authentication",
+  "./secrets/account-authentication",
+);
+const networkAuthentication = secret(
+  "network-authentication",
+  "./secrets/network-authentication",
+);
+const repositoryCredential = secret(
+  "repository-credential",
+  "./secrets/repository-credential",
+);
+const prepareWorkspace = script(
+  "prepare-workspace",
+  "./scripts/prepare-workspace.sh",
+);
+const verifyBootstrap = script(
+  "verify-bootstrap",
+  "./scripts/verify-bootstrap.sh",
+);
+const bootstrapPrompt = prompt(
+  "bootstrap-agent",
+  "./prompts/bootstrap-agent.md",
+  ["agent-name"],
+);
 const codex = codexProvider({
   authentication: { kind: "manual-device-auth", pollIntervalSeconds: 2 },
   version: "0.144.6",
@@ -51,23 +73,32 @@ export default defineAgent({
     architecture: "arm64",
     boards: ["raspberry-pi-5"],
   }),
-  account: { username: "my-user", initialPassword: accountPassword },
+  account: { username: "my-user", initialPassword: accountAuthentication },
   network: {
     hostname: "my-agent",
-    wifi: { ssid: "<network-ssid>", passphrase: wifiPassphrase },
+    wifi: {
+      ssid: "<network-ssid>",
+      passphrase: networkAuthentication,
+    },
   },
-  prompts: [audit],
+  prompts: [bootstrapPrompt],
   providers: [codex.provider],
   steps: [
     setEnvironment("set-agent-name", "AGENT_NAME", "My Agent"),
+    setEnvironment("enter-bootstrap-mode", "BOOTSTRAP_MODE", "true"),
     ...codex.bootstrapSteps,
-    automatic("prepare-workspace", command(prepare)),
-    installUserSecret("install-service-credential", serviceCredential, ".config/service/credential"),
-    renderPrompt("render-audit", audit, "audit", [
+    automatic("prepare-workspace", command(prepareWorkspace)),
+    installUserSecret(
+      "install-repository-credential",
+      repositoryCredential,
+      ".config/repository/credential",
+    ),
+    unsetEnvironment("leave-bootstrap-mode", "BOOTSTRAP_MODE"),
+    renderPrompt("render-bootstrap-prompt", bootstrapPrompt, "bootstrap-prompt", [
       promptVariable("agent-name", fromEnvironment("AGENT_NAME")),
     ]),
-    runProvider("run-audit", codex.provider, "audit"),
-    automatic("verify-audit", command(verify)),
+    runProvider("run-codex-bootstrap", codex.provider, "bootstrap-prompt"),
+    automatic("verify-codex-bootstrap", command(verifyBootstrap)),
   ],
 });
 ```
