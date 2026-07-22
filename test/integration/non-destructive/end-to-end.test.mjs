@@ -118,7 +118,7 @@ test("definitive assembly completes through non-destructive image and reboot sim
 
   try {
     const definition = await createDefinitiveDefinition(fixture.root);
-    assert.equal(definition.loaded.referenceCount, 4);
+    assert.equal(definition.loaded.referenceCount, 6);
     const first = await synthesizeDefinitiveAssembly(definition.loaded);
     const second = await synthesizeDefinitiveAssembly(definition.loaded);
     const firstHash = assemblySha256(first.assembly);

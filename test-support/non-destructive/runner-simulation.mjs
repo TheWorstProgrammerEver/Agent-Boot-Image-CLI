@@ -92,7 +92,6 @@ export const simulateRunnerReboots = async ({ privateMarker, systemRoot }) => {
   const interruptions = [
     { id: "codex-verify-version", kind: "step", phase: "succeeded" },
     { id: "codex-authenticate-device", kind: "step", phase: "succeeded" },
-    { id: "start-agent-support-service", kind: "step", phase: "succeeded" },
     [
       { kind: "secret", phase: "installed" },
       { id: "render-bootstrap-prompt", kind: "step", phase: "succeeded" },
@@ -180,9 +179,6 @@ export const simulateRunnerReboots = async ({ privateMarker, systemRoot }) => {
     const calls = hosts.flatMap(host => host.spawnCalls);
     assert.ok(calls.some(call => call.label === "runner step codex-install"));
     assert.ok(calls.some(call => call.stdio === "inherit"));
-    assert.ok(calls.filter(
-      call => call.label === "runner step start-agent-support-service",
-    ).length >= 2);
     assert.ok(calls.some(call => call.label === "runner provider codex step run-codex-bootstrap"));
     assert.ok(hosts.flatMap(host => host.execCalls).some(
       call => call.executable === "codex" && call.arguments?.join(" ") === "--version",

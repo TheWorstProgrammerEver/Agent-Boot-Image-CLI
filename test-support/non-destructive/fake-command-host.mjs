@@ -98,7 +98,7 @@ export class IntegrationCommandHost {
       this.#manualChecks += 1;
       return this.#immediate(this.#manualChecks === 1 ? incomplete : success, command);
     }
-    if (command.stdio === "inherit" || command.label === "runner step start-agent-support-service") {
+    if (command.stdio === "inherit") {
       return this.#running();
     }
     return this.#immediate(success, command);
