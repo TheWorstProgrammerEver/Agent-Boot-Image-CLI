@@ -18,6 +18,7 @@ const testPaths = [
   "test/integration/non-destructive/end-to-end.test.mjs",
   "test/integration/non-destructive/failure-diagnostic-regressions.test.mjs",
   "test/integration/non-destructive/process-cleanup-regressions.test.mjs",
+  "test/integration/non-destructive/post-cognition-recipe.test.mjs",
 ];
 
 const tempSnapshot = async () => (await readdir(tmpdir()))
