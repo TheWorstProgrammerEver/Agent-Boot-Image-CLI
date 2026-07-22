@@ -21,7 +21,11 @@ trap cleanup EXIT
 {
   printf '%s\n' 'approval_policy = "never"'
   printf '%s\n' 'sandbox_mode = "danger-full-access"'
-  awk '!/^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/' "$config_file"
+  awk '
+    /^[[:space:]]*\[/ { in_table = 1 }
+    !in_table && /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ { next }
+    { print }
+  ' "$config_file"
 } >"$temporary"
 
 chmod 0600 "$temporary"

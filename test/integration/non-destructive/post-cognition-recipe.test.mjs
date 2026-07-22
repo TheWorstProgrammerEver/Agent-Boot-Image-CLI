@@ -2,8 +2,20 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { access, readFile, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import process from "node:process";
+import { fileURLToPath, URL } from "node:url";
 import test from "node:test";
 
 import {
@@ -19,6 +31,7 @@ import {
 } from "../../../test-support/non-destructive/post-cognition-runner.mjs";
 
 const execFileAsync = promisify(execFile);
+const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const absent = path => assert.rejects(access(path), error => error.code === "ENOENT");
 const count = (values, expected) => values.filter(value => value === expected).length;
 
@@ -38,6 +51,51 @@ const expectedPostAuthOrder = [
   "run-post-cognition-review",
   "verify-post-cognition-setup",
 ];
+
+test("interactive Codex config edit preserves named profile overrides", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-interactive-config-"));
+  const home = join(root, "home", "my-user");
+  const config = join(home, ".codex", "config.toml");
+  const script = join(
+    repositoryRoot,
+    "examples",
+    "post-cognition-agent",
+    "scripts",
+    "configure-interactive-codex.sh",
+  );
+
+  try {
+    await mkdir(dirname(config), { recursive: true });
+    await writeFile(config, [
+      'personality = "pragmatic"',
+      'approval_policy = "on-request"',
+      'sandbox_mode = "workspace-write"',
+      "",
+      "[profiles.safe]",
+      'approval_policy = "on-request"',
+      'sandbox_mode = "read-only"',
+      "",
+    ].join("\n"));
+
+    await execFileAsync("bash", [script], {
+      env: { ...process.env, HOME: home },
+    });
+
+    assert.equal(await readFile(config, "utf8"), [
+      'approval_policy = "never"',
+      'sandbox_mode = "danger-full-access"',
+      'personality = "pragmatic"',
+      "",
+      "[profiles.safe]",
+      'approval_policy = "on-request"',
+      'sandbox_mode = "read-only"',
+      "",
+    ].join("\n"));
+    assert.equal((await stat(config)).mode & 0o777, 0o600);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
 
 test("authored post-cognition recipe orders, resumes, and redacts setup", async () => {
   const fixture = await createPostCognitionFixture();
