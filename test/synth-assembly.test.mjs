@@ -301,3 +301,48 @@ test("deterministic redacted assembly synthesis", async (context) => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("synthesis validates prompt template variables before writing assemblies", async (context) => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-synth-prompt-validation-"));
+  try {
+    const fixture = await setupDefinition(root);
+    const osLock = await loadOsLock();
+
+    await context.test("accepts declared variables used by the template", async () => {
+      const assembly = await synthesizeAssembly(fixture.definition, { osLock, runnerArtifacts });
+      assert.equal(assembly.documents.manifest.prompts[0].variables[0], "agent-name");
+    });
+
+    await context.test("rejects declared variables that the template does not use", async () => {
+      await writeFile(fixture.paths.prompt, "Hello without a variable\n", "utf8");
+
+      await assert.rejects(
+        synthesizeAssembly(fixture.definition, { osLock, runnerArtifacts }),
+        (error) => {
+          assert.ok(error instanceof SynthesisError);
+          assert.equal(error.kind, "invalid-input");
+          assert.equal(error.fieldPath, "$.prompts[0].source.url");
+          assert.match(error.message, /declares unused variable "agent-name"/u);
+          return true;
+        },
+      );
+    });
+
+    await context.test("rejects template variables that the prompt does not declare", async () => {
+      await writeFile(fixture.paths.prompt, "Hello {{missing-variable}}\n", "utf8");
+
+      await assert.rejects(
+        synthesizeAssembly(fixture.definition, { osLock, runnerArtifacts }),
+        (error) => {
+          assert.ok(error instanceof SynthesisError);
+          assert.equal(error.kind, "invalid-input");
+          assert.equal(error.fieldPath, "$.prompts[0].source.url");
+          assert.match(error.message, /uses undeclared variable "missing-variable"/u);
+          return true;
+        },
+      );
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
