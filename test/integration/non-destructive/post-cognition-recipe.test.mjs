@@ -149,6 +149,13 @@ test("interactive Codex config edit normalizes quoted top-level keys", async () 
         "'sandbox_mode' = 'workspace-write'",
       ],
     },
+    {
+      name: "unicode-escaped-basic-quoted",
+      ownedKeys: [
+        '"\\u0061pproval_policy" = "on-request"',
+        '"sandbox_\\U0000006dode" = "workspace-write"',
+      ],
+    },
   ];
 
   try {

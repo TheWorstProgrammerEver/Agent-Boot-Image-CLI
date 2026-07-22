@@ -35,9 +35,60 @@ trap cleanup EXIT
       return cursor - 1
     }
 
-    function is_owned_key_assignment(line) {
+    function hex_value(text,    character, cursor, digit, value) {
+      for (cursor = 1; cursor <= length(text); cursor++) {
+        character = tolower(substr(text, cursor, 1))
+        digit = index("0123456789abcdef", character)
+        if (digit == 0) {
+          return -1
+        }
+        value = (value * 16) + digit - 1
+      }
+      return value
+    }
+
+    function decode_basic_quoted_key(line,    character, cursor, decoded,
+      digits, escape_character, escape_length, rest, unicode_value) {
+      sub(/^[[:space:]]*/, "", line)
+      if (substr(line, 1, 1) != "\"") {
+        return invalid_key
+      }
+
+      for (cursor = 2; cursor <= length(line); cursor++) {
+        character = substr(line, cursor, 1)
+        if (character == "\"") {
+          rest = substr(line, cursor + 1)
+          return rest ~ /^[[:space:]]*=/ ? decoded : invalid_key
+        }
+        if (character != "\\") {
+          decoded = decoded character
+          continue
+        }
+
+        cursor++
+        escape_character = substr(line, cursor, 1)
+        if (escape_character == "u" || escape_character == "U") {
+          escape_length = escape_character == "u" ? 4 : 8
+          digits = substr(line, cursor + 1, escape_length)
+          unicode_value = length(digits) == escape_length ? hex_value(digits) : -1
+          if (unicode_value < 0 || unicode_value > 127) {
+            return invalid_key
+          }
+          decoded = decoded sprintf("%c", unicode_value)
+          cursor += escape_length
+        } else if (escape_character == "\"" || escape_character == "\\") {
+          decoded = decoded escape_character
+        } else {
+          return invalid_key
+        }
+      }
+      return invalid_key
+    }
+
+    function is_owned_key_assignment(line,    decoded_key) {
+      decoded_key = decode_basic_quoted_key(line)
       return line ~ /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ ||
-        line ~ /^[[:space:]]*"(approval_policy|sandbox_mode)"[[:space:]]*=/ ||
+        decoded_key == "approval_policy" || decoded_key == "sandbox_mode" ||
         line ~ ("^[[:space:]]*" quote "(approval_policy|sandbox_mode)" quote "[[:space:]]*=")
     }
 
@@ -95,7 +146,10 @@ trap cleanup EXIT
       }
     }
 
-    BEGIN { quote = sprintf("%c", 39) }
+    BEGIN {
+      invalid_key = "<not-a-basic-key-assignment>"
+      quote = sprintf("%c", 39)
+    }
     !in_table && value_depth == 0 && !in_multiline_basic &&
       !in_multiline_literal && /^[[:space:]]*\[/ { in_table = 1 }
     !in_table && value_depth == 0 && !in_multiline_basic &&
