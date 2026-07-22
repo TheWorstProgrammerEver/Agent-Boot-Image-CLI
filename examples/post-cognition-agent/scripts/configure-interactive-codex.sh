@@ -29,6 +29,12 @@ trap cleanup EXIT
       return backslashes % 2
     }
 
+    function quote_run_end(line, position, quote_character,    cursor) {
+      for (cursor = position; cursor <= length(line) && substr(line, cursor, 1) == quote_character; cursor++) {
+      }
+      return cursor - 1
+    }
+
     function scan_value(line,    character, cursor, in_basic, in_literal, next_three) {
       for (cursor = 1; cursor <= length(line); cursor++) {
         character = substr(line, cursor, 1)
@@ -37,14 +43,14 @@ trap cleanup EXIT
         if (in_multiline_basic) {
           if (next_three == "\"\"\"" && !is_escaped(line, cursor)) {
             in_multiline_basic = 0
-            cursor += 2
+            cursor = quote_run_end(line, cursor, "\"")
           }
           continue
         }
         if (in_multiline_literal) {
           if (next_three == quote quote quote) {
             in_multiline_literal = 0
-            cursor += 2
+            cursor = quote_run_end(line, cursor, quote)
           }
           continue
         }
