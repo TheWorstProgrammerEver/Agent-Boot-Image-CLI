@@ -52,7 +52,7 @@ const expectedPostAuthOrder = [
   "verify-post-cognition-setup",
 ];
 
-test("interactive Codex config edit preserves named profile overrides", async () => {
+test("interactive Codex config edit preserves multiline values and profile overrides", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-boot-interactive-config-"));
   const home = join(root, "home", "my-user");
   const config = join(home, ".codex", "config.toml");
@@ -68,6 +68,10 @@ test("interactive Codex config edit preserves named profile overrides", async ()
     await mkdir(dirname(config), { recursive: true });
     await writeFile(config, [
       'personality = "pragmatic"',
+      "matrix = [",
+      "  [1, 2],",
+      "  [3, 4],",
+      "]",
       'approval_policy = "on-request"',
       'sandbox_mode = "workspace-write"',
       "",
@@ -85,6 +89,10 @@ test("interactive Codex config edit preserves named profile overrides", async ()
       'approval_policy = "never"',
       'sandbox_mode = "danger-full-access"',
       'personality = "pragmatic"',
+      "matrix = [",
+      "  [1, 2],",
+      "  [3, 4],",
+      "]",
       "",
       "[profiles.safe]",
       'approval_policy = "on-request"',
