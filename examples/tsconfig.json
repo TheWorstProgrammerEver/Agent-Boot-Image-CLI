@@ -10,5 +10,8 @@
       "@agent-boot/protocol": ["../packages/protocol/src/index.ts"]
     }
   },
-  "include": ["definitive-agent/**/*.ts"]
+  "include": [
+    "definitive-agent/**/*.ts",
+    "post-cognition-agent/**/*.ts"
+  ]
 }
