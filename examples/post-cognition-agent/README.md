@@ -28,6 +28,11 @@ step is the successful `codex login status` gate. The authored sequence then:
 The external repository revisions are exact commits. Review and deliberately
 update those pins before a future physical run.
 
+GitHub App helpers are optional, not base image infrastructure. Omit the helper
+checkout, private-key install, and configuration steps for agents that only use
+public repositories or do not need to contribute changes. Add them only when an
+agent needs private repository access or short-lived write credentials.
+
 ## Primitive boundary
 
 Use `automatic()` for deterministic, inspectable, idempotent operations with a

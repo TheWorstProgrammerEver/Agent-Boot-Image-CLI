@@ -57,6 +57,8 @@ confirmation.
 
 - [Operator guide](docs/operator/README.md): definitions, secrets, commands,
   target selection, first boot, and recovery.
+- [SSH key promotion runbook](docs/operator/ssh-key-promotion.md): replace
+  temporary password SSH with validated public-key access.
 - [Security model and limitations](docs/security.md): trust, credential,
   image, deletion, and host boundaries.
 - [Supported matrix](docs/supported-matrix.md): the only advertised hardware,
