@@ -266,6 +266,11 @@ that console. Its completion probe is silent and does not read terminal input.
 The provider prompt cannot start until exact-version, permission-profile, and
 authentication gates succeed.
 
+If the image used temporary password SSH for first access, promote the host to
+public-key login and disable password authentication before treating it as a
+durable unattended agent. The reusable flow is documented in the
+[SSH key promotion runbook](ssh-key-promotion.md).
+
 Terminal success is `runner-succeeded`. Reboot once after success and confirm
 the service exits successfully without replaying the prompt, expected output
 persists, and `/etc/agent-boot/bootstrap-secrets` contains no remaining source
