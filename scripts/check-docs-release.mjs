@@ -108,6 +108,21 @@ for (const flag of [
   "--dry-run",
 ]) assert.match(cliReadme, new RegExp(flag, "u"));
 
+const operatorGuide = await readFile(join(repositoryRoot, "docs/operator/README.md"), "utf8");
+const definitiveExample = await readFile(
+  join(repositoryRoot, "examples/definitive-agent/README.md"),
+  "utf8",
+);
+for (const documentation of [operatorGuide, definitiveExample]) {
+  assert.match(documentation, /reviewed(?: package-resolution path| dependency\s+tree)/u);
+  assert.match(documentation, /@agent-boot\/definition/u);
+}
+assert.match(operatorGuide, /node_modules\/@agent-boot\/definition\/package\.json/u);
+assert.match(
+  operatorGuide,
+  /\.\/node_modules\/\.bin\/create-agent validate --definition \.\/my-agent\/definition\.ts/u,
+);
+
 const traceability = await readFile(join(repositoryRoot, "docs/traceability.md"), "utf8");
 const traceabilityRows = traceability.split("\n").filter(line =>
   line.startsWith("| ") && !line.startsWith("| ---") &&

@@ -103,6 +103,23 @@ export default defineAgent({
 });
 ```
 
+Copying the example does not by itself make its bare
+`@agent-boot/definition` import resolvable. From the root of the same reviewed,
+built workspace that will provide `create-agent`, link its reviewed dependency
+tree into the private definition directory:
+
+```console
+reviewed_workspace=$(pwd -P)
+ln -s "$reviewed_workspace/node_modules" ./my-agent/node_modules
+test -e ./my-agent/node_modules/@agent-boot/definition/package.json
+```
+
+The final command proves resolution is present without loading the definition
+or reading secret contents. Keep the link and CLI on the same reviewed
+workspace revision. A separately locked local package installation is also
+valid when its complete dependency tree is reviewed; do not rely on an
+unreviewed global package lookup.
+
 Declare every `{{variable}}` used by a prompt and bind every declared variable
 in `renderPrompt()`. Synthesis fails closed before assembly or image output when
 a placeholder is undeclared or a declaration is unused.
@@ -176,12 +193,15 @@ Build the reviewed workspace, then validate the trusted definition:
 ```console
 npm ci --ignore-scripts
 npm run build
-create-agent validate --definition ./my-agent/definition.ts
+./node_modules/.bin/create-agent validate --definition ./my-agent/definition.ts
 ```
 
 Expected success identifies the definition path, agent ID, schema version, and
 metadata-check count. It does not run declared commands, resolve providers,
 download an image, inspect devices, or read referenced contents.
+If an external definition instead fails during module loading, confirm its
+`node_modules/@agent-boot/definition/package.json` resolution path points to
+the reviewed workspace before inspecting definition contents.
 
 Use release-owned OS-lock and runner files from one reviewed, compatible build:
 

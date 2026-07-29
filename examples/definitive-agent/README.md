@@ -15,6 +15,12 @@ mode `0600`; do not commit them:
 - `secrets/repository-credential`: an illustrative credential installed into
   the account home by the runner.
 
+The copied definition still needs a reviewed package-resolution path for its
+`@agent-boot/definition` import. Follow the
+[operator guide setup](../../docs/operator/README.md#1-prepare-a-trusted-definition)
+to link the built workspace dependency tree or provide an equivalently reviewed,
+locked local installation before validation.
+
 The sequence performs deterministic Codex installation, profile verification,
 and manual device authentication before any authored setup. It then prepares
 the workspace with an idempotent shell script, transactionally installs the
