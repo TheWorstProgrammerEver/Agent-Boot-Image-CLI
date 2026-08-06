@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { canonicalJson } from "./canonical-json.js";
@@ -6,8 +7,18 @@ import { isSha256, sha256 } from "./digest.js";
 import {
   RUNNER_BUNDLE_SCHEMA_VERSION,
   type RunnerBundleManifest,
+  type RunnerServiceAccount,
 } from "./model.js";
-import { BUNDLE_MANIFEST_PATH, BUNDLE_ROOT_PATH } from "./paths.js";
+import {
+  BUNDLE_MANIFEST_PATH,
+  BUNDLE_ROOT_PATH,
+  TARGET_PATHS,
+  bundlePathForTarget,
+} from "./paths.js";
+import {
+  RunnerServiceContractError,
+  verifyRunnerServiceContract,
+} from "./systemd-service-contract.js";
 import { bundleEntries } from "./tree.js";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -20,6 +31,34 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boo
 
 const sameJson = (left: unknown, right: unknown): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
+
+const readVerifiedService = async (
+  root: string,
+  manifest: RunnerBundleManifest,
+): Promise<Uint8Array> => {
+  const bundlePath = bundlePathForTarget(TARGET_PATHS.systemdUnit);
+  const entry = manifest.entries.find((candidate) => candidate.path === bundlePath);
+  if (entry?.kind !== "file") throw new RunnerServiceContractError();
+
+  try {
+    const handle = await open(join(root, bundlePath), constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const status = await handle.stat();
+      const contents = await handle.readFile();
+      if (
+        !status.isFile() ||
+        contents.byteLength !== entry.size ||
+        sha256(contents) !== entry.sha256
+      ) throw new Error("changed");
+      return contents;
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (error instanceof RunnerServiceContractError) throw error;
+    throw new Error("Runner bundle service asset changed after verification.");
+  }
+};
 
 const hasValidHeader = (value: Record<string, unknown>): boolean => {
   const compatibility = value.compatibility;
@@ -50,6 +89,7 @@ const hasValidHeader = (value: Record<string, unknown>): boolean => {
 
 export const verifyRunnerBundle = async (
   bundleDirectory: string,
+  expectedAccount?: RunnerServiceAccount,
 ): Promise<RunnerBundleManifest> => {
   const root = resolve(bundleDirectory);
   const serialized = await readFile(join(root, BUNDLE_MANIFEST_PATH), "utf8");
@@ -79,6 +119,9 @@ export const verifyRunnerBundle = async (
   const manifest = document as unknown as RunnerBundleManifest;
   if (serialized !== canonicalJson(manifest)) {
     throw new Error("Runner bundle manifest is not canonical.");
+  }
+  if (expectedAccount !== undefined) {
+    verifyRunnerServiceContract(await readVerifiedService(root, manifest), expectedAccount);
   }
   return manifest;
 };

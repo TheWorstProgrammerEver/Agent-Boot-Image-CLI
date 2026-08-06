@@ -219,6 +219,12 @@ Remove `--plan` to publish the assembly atomically. Existing output is refused;
 use `--replace` only after inspecting the destination. Identical definition,
 OS-lock, runner, prompt, asset, and script bytes produce the same assembly ID.
 
+Release-owned Node runtime and reviewed runner package bytes may be reused, but
+the generated runner bundle is bound to the definition account that supplied
+its `User`, `Group`, `HOME`, npm prefix, and working-directory settings. Rebuild
+the bundle when the account changes; do not copy a bundle generated for another
+agent account into the imaging command.
+
 ## 4. Select and approve a stable target
 
 List candidates without mutation:
@@ -259,8 +265,11 @@ create-agent image \
   --dry-run
 ```
 
-Dry-run does not read secret contents, download artifacts, create an image
-workspace, inspect devices, or request confirmation. For the approved live run,
+Dry-run first rejects any runner bundle whose generated account contract does
+not match the trusted definition. That rejection identifies only the incompatible
+contract and does not print account paths or unit contents. Dry-run does not read
+secret contents, download artifacts, create an image workspace, inspect devices,
+or request confirmation. For the approved live run,
 remove `--dry-run`. The command verifies the pinned artifact, prints a redacted
 plan, requires the displayed acknowledgement phrase, locks and rechecks the
 target, unmounts descendants, writes exact raw bytes, performs full read-back,

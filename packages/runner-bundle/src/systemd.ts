@@ -4,7 +4,7 @@ import { TARGET_PATHS } from "./paths.js";
 const accountName = /^[a-z_][a-z0-9_-]{0,31}$/u;
 const safeAbsolutePath = /^\/(?:[A-Za-z0-9._-]+\/?)+$/u;
 
-const assertAccount = (account: RunnerServiceAccount): void => {
+export const assertRunnerServiceAccount = (account: RunnerServiceAccount): void => {
   if (!accountName.test(account.username) || !accountName.test(account.group)) {
     throw new Error("Runner account and group must be safe systemd account names.");
   }
@@ -16,7 +16,7 @@ const assertAccount = (account: RunnerServiceAccount): void => {
 };
 
 export const renderRunnerService = (account: RunnerServiceAccount): string => {
-  assertAccount(account);
+  assertRunnerServiceAccount(account);
   const npmPrefix = `${account.homeDirectory}/.local`;
   const path = [
     `${npmPrefix}/bin`,

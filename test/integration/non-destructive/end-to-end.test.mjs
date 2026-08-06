@@ -178,8 +178,15 @@ test("definitive assembly completes through non-destructive image and reboot sim
         customizeImage: async input => {
           input.cancellation.throwIfAborted();
           assert.equal(input.targetPath, targetDevice.canonicalPath);
+          assert.deepEqual(input.account, {
+            group: "my-user",
+            homeDirectory: "/home/my-user",
+            username: "my-user",
+            workingDirectory: "/home/my-user/workspace",
+          });
           events.push("fixture-customization");
           adapterResult = await customizeRaspberryPiOsTrixie(fixture.options({
+            account: { ...input.account, gid: 1000, uid: 1000 },
             assemblyDirectory: input.assemblyDirectory,
             bootstrapSecrets: input.bootstrapSecrets,
             passwordHasher: hashFixture.hasher,
@@ -236,10 +243,10 @@ test("definitive assembly completes through non-destructive image and reboot sim
           assert.deepEqual(artifacts, runnerArtifacts);
           return first.assembly;
         },
-        verifyRunnerBundle: async directory => {
+        verifyRunnerBundle: async (directory, account) => {
           events.push("runner-bundle-verification");
           assert.equal(directory, "/fixture/runner-bundle");
-          await verifyRunnerBundle(fixture.bundle);
+          await verifyRunnerBundle(fixture.bundle, account);
         },
         writeImage: async input => {
           input.cancellation.throwIfAborted();
@@ -322,9 +329,9 @@ test("definitive assembly completes through non-destructive image and reboot sim
     if (accessAudit !== undefined) assert.deepEqual(accessAudit.deviceAccessAttempts, []);
     assert.deepEqual(events, [
       "trusted-definition-validation",
+      "runner-bundle-verification",
       "curated-os-lock",
       "runner-artifacts",
-      "runner-bundle-verification",
       "deterministic-synthesis",
       "fixture-secret-references",
       "fake-artifact",

@@ -23,12 +23,16 @@ import {
 import { ImageCustomizationError } from "@agent-boot/cli/customize";
 import { ImageWriteError } from "@agent-boot/cli/imaging";
 import { FakeCommandHost } from "@agent-boot/process";
+import { RunnerServiceContractError } from "@agent-boot/runner-bundle";
 import {
   requestImageTargetAcknowledgement,
 } from "../packages/cli/dist/image/live.js";
 import { XzRawImagePreparer } from "../packages/cli/dist/image/raw-image.js";
 import { createDefinitionFixture } from "../test-support/cli-definition-fixtures.mjs";
-import { createAdapterFixture } from "../test-support/raspberry-pi-os-adapter-helpers.mjs";
+import {
+  createAdapterFixture,
+  mutateRunnerServiceBundle,
+} from "../test-support/raspberry-pi-os-adapter-helpers.mjs";
 
 const stableTarget = "/dev/disk/by-id/fixture-image-target";
 const secretMarker = "fixture-image-secret-must-not-appear";
@@ -53,6 +57,13 @@ const definition = {
   scripts: [],
   secrets: [],
   steps: [],
+};
+
+const serviceAccount = {
+  group: "my-user",
+  homeDirectory: "/home/my-user",
+  username: "my-user",
+  workingDirectory: "/home/my-user/workspace",
 };
 
 const rootDevice = {
@@ -226,8 +237,9 @@ const createHarness = ({ failAt, releaseFailure = false, signalAt } = {}) => {
       maybeInterrupt("synthesize");
       return { assemblyId: "assembly-fixture", copied: {}, documents: {}, files: [] };
     },
-    verifyRunnerBundle: async () => {
+    verifyRunnerBundle: async (_directory, account) => {
       events.push("verify-bundle");
+      assert.deepEqual(account, serviceAccount);
       maybeInterrupt("verify-bundle");
     },
     writeImage: async input => {
@@ -293,7 +305,7 @@ test("image workflow executes the exact guarded order and reports only redacted 
   const result = await runImageWorkflow(request(), harness.io, harness.dependencies);
 
   assert.deepEqual(harness.events, [
-    "load", "resolve-os", "runner-artifacts", "verify-bundle", "synthesize", "secrets",
+    "load", "verify-bundle", "resolve-os", "runner-artifacts", "synthesize", "secrets",
     "artifact", "workspace", "publish", "prepare-source", "preflight", "confirm",
     "lock", "recheck", "write", "verify", "customize", "check", "release", "cleanup",
   ]);
@@ -307,7 +319,7 @@ test("image workflow executes the exact guarded order and reports only redacted 
 
 test("every injected phase failure short-circuits later work and still cleans owned state", async t => {
   const phases = [
-    "load", "resolve-os", "runner-artifacts", "verify-bundle", "synthesize", "secrets",
+    "load", "verify-bundle", "resolve-os", "runner-artifacts", "synthesize", "secrets",
     "artifact", "workspace", "publish", "prepare-source", "preflight", "confirm",
     "lock", "recheck", "write", "verify", "customize", "check",
   ];
@@ -501,9 +513,27 @@ test("dry-run completes validation and synthesis without reaching any live bound
   const result = await runImageWorkflow(request({ dryRun: true }), harness.io, harness.dependencies);
   assert.equal(result.dryRun, true);
   assert.deepEqual(harness.events, [
-    "load", "resolve-os", "runner-artifacts", "verify-bundle", "synthesize",
+    "load", "verify-bundle", "resolve-os", "runner-artifacts", "synthesize",
   ]);
   assert.match(harness.stdout.join("\n"), /no secrets, downloads, commands, devices/u);
+});
+
+test("an incompatible runner service fails before every live image boundary", async () => {
+  const harness = createHarness();
+  harness.dependencies.verifyRunnerBundle = async (_directory, account) => {
+    harness.events.push("verify-bundle");
+    assert.deepEqual(account, serviceAccount);
+    throw new RunnerServiceContractError();
+  };
+
+  assert.equal(
+    await runImageCommand(argumentsFor(), harness.io, harness.dependencies),
+    IMAGE_EXIT_CODE.preparationFailure,
+  );
+  assert.deepEqual(harness.events, ["load", "verify-bundle"]);
+  const diagnostic = harness.stderr.join("\n");
+  assert.match(diagnostic, /runner bundle service contract is incompatible/iu);
+  assert.doesNotMatch(diagnostic, new RegExp(`${secretMarker}|my-user|/fixture/bundle`, "u"));
 });
 
 test("cleanup failure preserves the original verification error first", async () => {
@@ -732,4 +762,81 @@ test("executable dry-run cannot reach host commands or device inspection", async
       rm(root, { force: true, recursive: true }),
     ]);
   }
+});
+
+test("executable dry-run rejects every account-bound runner directive with a valid bundle tree", async t => {
+  const mutations = [
+    ["User", "User=my-user", "User=other-user"],
+    ["Group", "Group=my-user", "Group=other-group"],
+    ["HOME", "Environment=HOME=/home/my-user", "Environment=HOME=/srv/other-home"],
+    [
+      "npm prefix",
+      "Environment=NPM_CONFIG_PREFIX=/home/my-user/.local",
+      "Environment=NPM_CONFIG_PREFIX=/srv/other-home/.local",
+    ],
+    [
+      "runner working directory",
+      "Environment=AGENT_BOOT_WORKING_DIRECTORY=/home/my-user/workspace",
+      "Environment=AGENT_BOOT_WORKING_DIRECTORY=/srv/other-workspace",
+    ],
+    [
+      "systemd working directory",
+      "WorkingDirectory=/home/my-user/workspace",
+      "WorkingDirectory=/srv/other-workspace",
+    ],
+    [
+      "systemd section and whitespace",
+      "[Service]\nType=exec\nUser=my-user",
+      "User=my-user\n[Service]\nType=exec\nUser = root",
+      "root",
+    ],
+  ];
+
+  for (const [name, expected, replacement, leaked = replacement] of mutations) await t.test(name, async () => {
+    const root = await mkdtemp(join(tmpdir(), "agent-boot-image-account-bound-"));
+    const adapter = await createAdapterFixture();
+    try {
+      const fixture = await createDefinitionFixture(root, `account-bound-${name.replaceAll(" ", "-")}`);
+      const runtime = join(root, "node-runtime");
+      const entrypoint = join(root, "runner.mjs");
+      await writeFile(runtime, "fixture runtime\n");
+      await writeFile(entrypoint, "export {};\n");
+      await mutateRunnerServiceBundle(adapter.bundle, contents =>
+        contents.replace(expected, replacement));
+
+      const result = spawnSync(process.execPath, [
+        "packages/cli/dist/bin.js",
+        "image",
+        "--definition", fixture.definitionPath,
+        "--runner-runtime", runtime,
+        "--runner-entrypoint", entrypoint,
+        "--runner-bundle", adapter.bundle,
+        "--cache-directory", join(root, "cache-must-not-exist"),
+        "--lock-directory", join(root, "locks-must-not-exist"),
+        "--target", stableTarget,
+        "--expect-model", targetDevice.model,
+        "--expect-serial", targetDevice.serial,
+        "--expect-transport", targetDevice.transport,
+        "--max-size-bytes", String(targetDevice.sizeBytes),
+        "--dry-run",
+      ], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, PATH: "/fixture/no-commands-available" },
+      });
+      assert.equal(result.status, IMAGE_EXIT_CODE.preparationFailure, result.stderr);
+      assert.match(result.stderr, /runner bundle service contract is incompatible/iu);
+      assert.doesNotMatch(
+        `${result.stdout}${result.stderr}`,
+        new RegExp(`${secretMarker}|${leaked.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`, "u"),
+      );
+      await assert.rejects(readFile(join(root, "cache-must-not-exist")));
+      await assert.rejects(readFile(join(root, "locks-must-not-exist")));
+    } finally {
+      await Promise.all([
+        adapter.cleanup(),
+        rm(root, { force: true, recursive: true }),
+      ]);
+    }
+  });
 });

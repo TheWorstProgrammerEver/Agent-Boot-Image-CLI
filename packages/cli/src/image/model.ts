@@ -1,6 +1,7 @@
 import type { AgentDefinition } from "@agent-boot/definition";
 import type { DriveInspector } from "@agent-boot/os-linux";
 import type { OsLock } from "@agent-boot/protocol";
+import type { RunnerServiceAccount } from "@agent-boot/runner-bundle";
 import type { SynthesizedAssembly } from "@agent-boot/synth";
 
 import type { CommandIo } from "../validate-command.js";
@@ -61,6 +62,7 @@ export interface ImageWorkflowDependencies {
   ) => Promise<ConfirmedImageTargetPlan>;
   readonly createWorkspace: () => Promise<ImageWorkspace>;
   readonly customizeImage: (input: {
+    readonly account: RunnerServiceAccount;
     readonly assemblyDirectory: string;
     readonly bootstrapSecrets: ReadonlyMap<string, Uint8Array>;
     readonly cancellation: AbortSignal;
@@ -99,7 +101,10 @@ export interface ImageWorkflowDependencies {
     osLock: OsLock,
     runnerArtifacts: { readonly entrypoint: Uint8Array; readonly runtime: Uint8Array },
   ) => Promise<SynthesizedAssembly>;
-  readonly verifyRunnerBundle: (directory: string) => Promise<void>;
+  readonly verifyRunnerBundle: (
+    directory: string,
+    account: RunnerServiceAccount,
+  ) => Promise<void>;
   readonly writeImage: (input: {
     readonly afterVerify: (result: {
       readonly cancellation: AbortSignal;

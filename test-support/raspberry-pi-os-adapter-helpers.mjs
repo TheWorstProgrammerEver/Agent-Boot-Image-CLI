@@ -17,7 +17,13 @@ import { join, relative } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 import { FakeCommandHost } from "@agent-boot/process";
-import { buildRunnerBundle, inspectTree, treeSha256 } from "@agent-boot/runner-bundle";
+import {
+  buildRunnerBundle,
+  canonicalJson,
+  inspectTree,
+  treeSha256,
+  verifyRunnerBundle,
+} from "@agent-boot/runner-bundle";
 import { OpenSslPasswordHasher } from "@agent-boot/os-adapters/raspberry-pi-os-trixie";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -206,6 +212,36 @@ export const createAdapterFixture = async () => {
     root,
     systemRoot,
   };
+};
+
+export const mutateRunnerServiceBundle = async (bundle, mutate) => {
+  const servicePath = join(
+    bundle,
+    "root/etc/systemd/system/agent-boot-runner.service",
+  );
+  const original = await readFile(servicePath, "utf8");
+  const contents = mutate(original);
+  if (contents === original) throw new Error("Runner service fixture mutation had no effect.");
+  await writeFile(servicePath, contents);
+
+  const manifestPath = join(bundle, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const entries = manifest.entries.map(entry => entry.path ===
+    "root/etc/systemd/system/agent-boot-runner.service"
+    ? {
+        ...entry,
+        sha256: createHash("sha256").update(contents).digest("hex"),
+        size: Buffer.byteLength(contents),
+      }
+    : entry);
+  const unsigned = { ...manifest, entries };
+  delete unsigned.bundleSha256;
+  const updated = {
+    ...unsigned,
+    bundleSha256: createHash("sha256").update(canonicalJson(unsigned)).digest("hex"),
+  };
+  await writeFile(manifestPath, canonicalJson(updated));
+  await verifyRunnerBundle(bundle);
 };
 
 export const snapshotTree = async root => {

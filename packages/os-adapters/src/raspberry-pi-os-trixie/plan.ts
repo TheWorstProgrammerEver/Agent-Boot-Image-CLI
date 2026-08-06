@@ -1,8 +1,10 @@
 import type { AssemblyManifest, RunnerPlan } from "@agent-boot/protocol";
 import {
   BUNDLE_ROOT_PATH,
+  RunnerServiceContractError,
   targetPathForBundleEntry,
   type RunnerBundleManifest,
+  verifyRunnerServiceContract,
 } from "@agent-boot/runner-bundle";
 
 import { adapterError } from "./errors.js";
@@ -143,20 +145,17 @@ const validateServiceAccount = (
   contents: Uint8Array,
   account: RaspberryPiAccount,
 ): void => {
-  const lines = new Set(Buffer.from(contents).toString("utf8").split("\n"));
-  const npmPrefix = `${account.homeDirectory}/.local`;
-  for (const expected of [
-    `User=${account.username}`,
-    `Group=${account.group}`,
-    `Environment=HOME=${account.homeDirectory}`,
-    `Environment=NPM_CONFIG_PREFIX=${npmPrefix}`,
-    `WorkingDirectory=${account.workingDirectory}`,
-    "TTYPath=/dev/tty1",
-    "StandardInput=tty-force",
-  ]) {
-    if (!lines.has(expected)) {
+  try {
+    verifyRunnerServiceContract(contents, account);
+  } catch (error) {
+    if (error instanceof RunnerServiceContractError) {
       throw adapterError("incompatible-image", "The runner service account contract does not match.");
     }
+    throw error;
+  }
+  const lines = new Set(Buffer.from(contents).toString("utf8").split("\n"));
+  if (!lines.has("TTYPath=/dev/tty1") || !lines.has("StandardInput=tty-force")) {
+    throw adapterError("incompatible-image", "The runner console service contract does not match.");
   }
 };
 
