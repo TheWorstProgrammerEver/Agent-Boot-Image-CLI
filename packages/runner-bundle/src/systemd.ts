@@ -4,7 +4,7 @@ import { TARGET_PATHS } from "./paths.js";
 const accountName = /^[a-z_][a-z0-9_-]{0,31}$/u;
 const safeAbsolutePath = /^\/(?:[A-Za-z0-9._-]+\/?)+$/u;
 
-const assertAccount = (account: RunnerServiceAccount): void => {
+export const assertRunnerServiceAccount = (account: RunnerServiceAccount): void => {
   if (!accountName.test(account.username) || !accountName.test(account.group)) {
     throw new Error("Runner account and group must be safe systemd account names.");
   }
@@ -15,52 +15,8 @@ const assertAccount = (account: RunnerServiceAccount): void => {
   }
 };
 
-export class RunnerServiceContractError extends Error {
-  readonly code = "incompatible-runner-service-contract" as const;
-
-  constructor() {
-    super("Runner bundle service contract is incompatible with the definition account.");
-    this.name = "RunnerServiceContractError";
-  }
-}
-
-const accountDirectives = (account: RunnerServiceAccount): readonly {
-  readonly expected: string;
-  readonly prefix: string;
-}[] => {
-  assertAccount(account);
-  const npmPrefix = `${account.homeDirectory}/.local`;
-  return [
-    { expected: `User=${account.username}`, prefix: "User=" },
-    { expected: `Group=${account.group}`, prefix: "Group=" },
-    { expected: `Environment=HOME=${account.homeDirectory}`, prefix: "Environment=HOME=" },
-    {
-      expected: `Environment=NPM_CONFIG_PREFIX=${npmPrefix}`,
-      prefix: "Environment=NPM_CONFIG_PREFIX=",
-    },
-    {
-      expected: `Environment=AGENT_BOOT_WORKING_DIRECTORY=${account.workingDirectory}`,
-      prefix: "Environment=AGENT_BOOT_WORKING_DIRECTORY=",
-    },
-    { expected: `WorkingDirectory=${account.workingDirectory}`, prefix: "WorkingDirectory=" },
-  ];
-};
-
-export const verifyRunnerServiceContract = (
-  contents: Uint8Array,
-  account: RunnerServiceAccount,
-): void => {
-  const lines = Buffer.from(contents).toString("utf8").split("\n");
-  for (const directive of accountDirectives(account)) {
-    const matches = lines.filter((line) => line.startsWith(directive.prefix));
-    if (matches.length !== 1 || matches[0] !== directive.expected) {
-      throw new RunnerServiceContractError();
-    }
-  }
-};
-
 export const renderRunnerService = (account: RunnerServiceAccount): string => {
-  assertAccount(account);
+  assertRunnerServiceAccount(account);
   const npmPrefix = `${account.homeDirectory}/.local`;
   const path = [
     `${npmPrefix}/bin`,

@@ -19,6 +19,7 @@ import {
   targetPathForBundleEntry,
   verifyNodeRuntime,
   verifyRunnerBundle,
+  verifyRunnerServiceContract,
 } from "@agent-boot/runner-bundle";
 
 const sha = character => character.repeat(64);
@@ -311,6 +312,55 @@ test("systemd service owns tty1, uses explicit restart/state policy, and verifie
   } finally {
     await fixture.cleanup();
   }
+});
+
+test("runner service contract resolves systemd sections, whitespace, duplicates, and resets", () => {
+  const unit = Buffer.from([
+    "[Unit]",
+    "User=my-user",
+    "WorkingDirectory=/home/my-user/workspace",
+    "[Service]",
+    "User=other-user",
+    "User = my-user",
+    "Group = my-user",
+    "Environment=HOME=/srv/other-home",
+    "Environment =",
+    'Environment = "HOME=/home/my-user" NPM_CONFIG_PREFIX=/home/my-user/.local',
+    "Environment = AGENT_BOOT_WORKING_DIRECTORY=/home/my-user/workspace",
+    "EnvironmentFile=/fixture/overrides",
+    "EnvironmentFile=",
+    "PAMName=login",
+    "PAMName=",
+    "WorkingDirectory=/srv/other-workspace",
+    "WorkingDirectory = /home/my-user/workspace",
+    "UnsetEnvironment=HOME=/srv/other-home",
+    "[Install]",
+    "User=other-user",
+    "",
+  ].join("\n"));
+
+  assert.doesNotThrow(() => verifyRunnerServiceContract(unit, account));
+  assert.throws(
+    () => verifyRunnerServiceContract(
+      Buffer.from(unit.toString().replace("User = my-user", "User = my-user\nUser = root")),
+      account,
+    ),
+    /service contract is incompatible/iu,
+  );
+  assert.throws(
+    () => verifyRunnerServiceContract(
+      Buffer.from(unit.toString().replace("[Install]", "UnsetEnvironment=HOME\n[Install]")),
+      account,
+    ),
+    /service contract is incompatible/iu,
+  );
+  assert.throws(
+    () => verifyRunnerServiceContract(
+      Buffer.from(unit.toString().replace("[Install]", "EnvironmentFile=/fixture/overrides\n[Install]")),
+      account,
+    ),
+    /service contract is incompatible/iu,
+  );
 });
 
 test("runner service status is private, atomic, and actionable after startup failure", async () => {

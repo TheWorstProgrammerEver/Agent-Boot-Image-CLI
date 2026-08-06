@@ -27,7 +27,7 @@ export {
 export { RuntimeSecretResolver } from "./runtime/secret-resolver.js";
 export {
   RunnerServiceContractError,
-  renderRunnerService,
   verifyRunnerServiceContract,
-} from "./systemd.js";
+} from "./systemd-service-contract.js";
+export { renderRunnerService } from "./systemd.js";
 export { inspectTree, treeSha256, type TreeRecord } from "./tree.js";

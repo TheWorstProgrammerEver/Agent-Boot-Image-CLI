@@ -784,9 +784,15 @@ test("executable dry-run rejects every account-bound runner directive with a val
       "WorkingDirectory=/home/my-user/workspace",
       "WorkingDirectory=/srv/other-workspace",
     ],
+    [
+      "systemd section and whitespace",
+      "[Service]\nType=exec\nUser=my-user",
+      "User=my-user\n[Service]\nType=exec\nUser = root",
+      "root",
+    ],
   ];
 
-  for (const [name, expected, replacement] of mutations) await t.test(name, async () => {
+  for (const [name, expected, replacement, leaked = replacement] of mutations) await t.test(name, async () => {
     const root = await mkdtemp(join(tmpdir(), "agent-boot-image-account-bound-"));
     const adapter = await createAdapterFixture();
     try {
@@ -822,7 +828,7 @@ test("executable dry-run rejects every account-bound runner directive with a val
       assert.match(result.stderr, /runner bundle service contract is incompatible/iu);
       assert.doesNotMatch(
         `${result.stdout}${result.stderr}`,
-        new RegExp(`${secretMarker}|${replacement.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`, "u"),
+        new RegExp(`${secretMarker}|${leaked.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`, "u"),
       );
       await assert.rejects(readFile(join(root, "cache-must-not-exist")));
       await assert.rejects(readFile(join(root, "locks-must-not-exist")));

@@ -15,7 +15,10 @@ import {
   TARGET_PATHS,
   bundlePathForTarget,
 } from "./paths.js";
-import { RunnerServiceContractError, verifyRunnerServiceContract } from "./systemd.js";
+import {
+  RunnerServiceContractError,
+  verifyRunnerServiceContract,
+} from "./systemd-service-contract.js";
 import { bundleEntries } from "./tree.js";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
