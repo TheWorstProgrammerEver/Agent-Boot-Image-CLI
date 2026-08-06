@@ -1,3 +1,5 @@
+import { RunnerServiceContractError } from "@agent-boot/runner-bundle";
+
 import { ImageWorkflowError } from "./errors.js";
 import { IMAGE_USAGE, parseImageArguments } from "./arguments.js";
 import type { ImageWorkflowDependencies } from "./model.js";
@@ -26,6 +28,20 @@ const exitCodeFor = (error: ImageWorkflowError): CreateAgentExitCode => {
     return IMAGE_EXIT_CODE.customizationFailure;
   }
   return IMAGE_EXIT_CODE.preparationFailure;
+};
+
+const hasIncompatibleRunnerService = (error: unknown): boolean => {
+  const pending = [error];
+  const seen = new Set<unknown>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined || seen.has(current)) continue;
+    seen.add(current);
+    if (current instanceof RunnerServiceContractError) return true;
+    if (current instanceof AggregateError) pending.push(...current.errors as unknown[]);
+    if (current instanceof Error && current.cause !== undefined) pending.push(current.cause);
+  }
+  return false;
 };
 
 export const runImageCommand = async (
@@ -61,8 +77,12 @@ export const runImageCommand = async (
     const cleanup = failure.cleanupFailed
       ? " Cleanup did not complete; recovery cleanup is required."
       : "";
+    const runnerService = hasIncompatibleRunnerService(failure)
+      ? " Runner bundle service contract is incompatible with the definition account."
+      : "";
     io.stderr(
-      `Image failed during ${failure.phase}; recovery state: ${failure.recovery}.${cleanup}`,
+      `Image failed during ${failure.phase}; recovery state: ${failure.recovery}.` +
+      `${runnerService}${cleanup}`,
     );
     return exitCodeFor(failure);
   }

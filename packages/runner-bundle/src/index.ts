@@ -25,5 +25,9 @@ export {
   networkRecoveryGuidance,
 } from "./runtime/network-recovery.js";
 export { RuntimeSecretResolver } from "./runtime/secret-resolver.js";
-export { renderRunnerService } from "./systemd.js";
+export {
+  RunnerServiceContractError,
+  renderRunnerService,
+  verifyRunnerServiceContract,
+} from "./systemd.js";
 export { inspectTree, treeSha256, type TreeRecord } from "./tree.js";

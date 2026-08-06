@@ -104,7 +104,7 @@ test("runner bundles are reproducible, target-addressable, and mode separated", 
     const secondManifest = await buildRunnerBundle({ ...options, outputDirectory: second });
 
     assert.deepEqual(firstManifest, secondManifest);
-    assert.deepEqual(await verifyRunnerBundle(first), firstManifest);
+    assert.deepEqual(await verifyRunnerBundle(first, account), firstManifest);
     assert.equal(
       await readFile(join(first, "manifest.json"), "utf8"),
       await readFile(join(second, "manifest.json"), "utf8"),

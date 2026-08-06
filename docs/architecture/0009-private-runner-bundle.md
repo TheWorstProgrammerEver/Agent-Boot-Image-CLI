@@ -48,6 +48,9 @@ fire-and-forget output is drained and discarded; only manual foreground commands
 ## Consequences
 
 - The Raspberry Pi OS adapter places verified bundle entries but does not own runner internals.
+- The generated bundle is account-bound. Image preflight compares its service-account directives
+  with the trusted definition before any secret, artifact, device, output, lock, or write boundary.
+  Release-owned runtime/package bytes remain reusable inputs for rebuilding a compatible bundle.
 - Bundle tests remain non-destructive and require neither downloads nor executable ARM64 emulation.
 - A Node release change requires new immutable distribution and extracted-tree pins.
 - Wi-Fi recovery replaces only the fixed NetworkManager profile and leaves the durable runner

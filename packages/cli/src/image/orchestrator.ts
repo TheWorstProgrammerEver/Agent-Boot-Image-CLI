@@ -1,5 +1,6 @@
 import { prepareImageTargetPlan } from "../drives/index.js";
 import type { ImageWriteProgress } from "../imaging/index.js";
+import type { RunnerServiceAccount } from "@agent-boot/runner-bundle";
 import {
   ImageWorkflowError,
   type ImageRecoveryState,
@@ -23,6 +24,13 @@ const checkCanceled = (cancellation: AbortSignal): void => {
 const wipeSecrets = (secrets: ReadonlyMap<string, Uint8Array> | undefined): void => {
   for (const value of secrets?.values() ?? []) value.fill(0);
 };
+
+const runnerServiceAccount = (username: string): RunnerServiceAccount => ({
+  group: username,
+  homeDirectory: `/home/${username}`,
+  username,
+  workingDirectory: `/home/${username}/workspace`,
+});
 
 const latestRecovery = (
   current: ImageRecoveryState,
@@ -55,6 +63,11 @@ export const runImageWorkflow = async (
     for (const signal of forwardedSignals) signalSource.on(signal, abort);
     checkCanceled(cancellation.signal);
 
+    const account = runnerServiceAccount(loaded.definition.account.username);
+    activePhase = "validation";
+    await dependencies.verifyRunnerBundle(request.runnerBundleDirectory, account);
+    checkCanceled(cancellation.signal);
+
     activePhase = "os-resolution";
     const osLock = dependencies.resolveOsLock(loaded.definition);
     checkCanceled(cancellation.signal);
@@ -64,7 +77,6 @@ export const runImageWorkflow = async (
       entrypointPath: request.runnerEntrypointPath,
       runtimePath: request.runnerRuntimePath,
     });
-    await dependencies.verifyRunnerBundle(request.runnerBundleDirectory);
     checkCanceled(cancellation.signal);
 
     activePhase = "synthesis";
@@ -142,6 +154,7 @@ export const runImageWorkflow = async (
           recovery = "target-verified-needs-customization";
           activePhase = "customize";
           const customization = await dependencies.customizeImage({
+            account,
             assemblyDirectory: preparedWorkspace.assemblyDirectory,
             bootstrapSecrets: loadedBootstrapSecrets,
             cancellation: transactionCancellation,

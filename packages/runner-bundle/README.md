@@ -40,6 +40,12 @@ onto all three child descriptors; they never inherit the runner's journal-backed
 Automatic, provider, completion-probe, and fire-and-forget output is drained and discarded; only
 structured runner progress and constant startup diagnostics reach the unit output.
 
+The generated service makes the complete runner bundle account-bound: `User`, `Group`, `HOME`, the
+account-local npm prefix, and both runner/systemd working-directory settings must match the trusted
+definition account at image preflight. The immutable Node release and reviewed package bytes can be
+reused as inputs when rebuilding for another account; copying an already generated bundle between
+accounts is unsupported unless a later format deliberately separates and revalidates that binding.
+
 The OS adapter masks tty1's getty before boot and explicitly enables tty2 as the recovery login
 console. Operators can switch to tty2 locally when runner recovery or journal inspection is needed.
 The root-only mutation forms of `agent-boot-network` safely prompt for Wi-Fi credentials, atomically

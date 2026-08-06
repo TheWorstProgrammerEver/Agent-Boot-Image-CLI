@@ -110,6 +110,14 @@ validation. Dry-run does not read secret contents, download artifacts, create a
 workspace, instantiate command/device adapters, inspect a device, or request
 confirmation.
 
+Runner bundles are account-bound artifacts. Before any live preparation boundary, both dry-run
+and live imaging compare the generated service's `User`, `Group`, `HOME`, npm prefix, and working
+directory with the account derived from the trusted definition. A mismatch fails preparation
+without loading secrets, acquiring an OS artifact, creating an output workspace, inspecting or
+locking a target, unmounting, writing, or customizing. Release-owned runtime and package bytes may
+be reused to build another bundle, but the generated bundle itself must be rebuilt for a different
+account unless a future bundle format explicitly redesigns that contract.
+
 Image-specific failures use exit `9` for preparation, `10` for preflight or
 confirmation, `11` for lock/write/read-back, `12` for customization/checks,
 `13` for cleanup failure, and `130` for cancellation. Diagnostics identify the

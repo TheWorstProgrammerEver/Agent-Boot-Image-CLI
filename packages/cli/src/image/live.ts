@@ -72,7 +72,9 @@ const commonSafeDependencies = (): Pick<ImageWorkflowDependencies,
   resolveOsLock: resolveDefinitionOsLock,
   synthesize: async (definition, osLock, runnerArtifacts) =>
     synthesizeAssembly(definition, { osLock, runnerArtifacts }),
-  verifyRunnerBundle: async directory => { await verifyRunnerBundle(directory); },
+  verifyRunnerBundle: async (directory, account) => {
+    await verifyRunnerBundle(directory, account);
+  },
 });
 
 export const createDryRunImageWorkflowDependencies = (): ImageWorkflowDependencies => ({
@@ -114,7 +116,6 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
     }),
     createWorkspace: createSystemImageWorkspace,
     customizeImage: async input => {
-      const username = input.definition.account.username;
       return customizeWrittenImage({
         assemblyDirectory: input.assemblyDirectory,
         bootstrapSecrets: input.bootstrapSecrets,
@@ -125,12 +126,9 @@ export const createLiveImageWorkflowDependencies = (): ImageWorkflowDependencies
       }, {
         adapter: new RaspberryPiOsTrixieCustomizationAdapter({
           account: {
+            ...input.account,
             gid: 1000,
-            group: username,
-            homeDirectory: `/home/${username}`,
             uid: 1000,
-            username,
-            workingDirectory: `/home/${username}/workspace`,
           },
           ownership: new PosixImageOwnership(),
           passwordHasher: new OpenSslPasswordHasher({ commandHost: commands }),
