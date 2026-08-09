@@ -9,6 +9,7 @@
   "references": [
     { "path": "../process" },
     { "path": "../protocol" },
-    { "path": "../runner" }
+    { "path": "../runner" },
+    { "path": "../scheduled-prompt-jobs" }
   ]
 }

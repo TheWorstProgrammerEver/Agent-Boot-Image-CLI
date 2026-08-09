@@ -59,5 +59,8 @@ export interface BuildRunnerBundleOptions {
   readonly node: NodeRuntimePin;
   readonly nodeRuntimeDirectory: string;
   readonly outputDirectory: string;
-  readonly packageDirectories?: Readonly<Record<"process" | "protocol" | "runner" | "runner-bundle", string>>;
+  readonly packageDirectories?: Readonly<Record<
+    "process" | "protocol" | "runner" | "runner-bundle" | "scheduled-prompt-jobs",
+    string
+  >>;
 }

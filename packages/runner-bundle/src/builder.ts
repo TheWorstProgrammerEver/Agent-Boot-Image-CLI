@@ -29,14 +29,22 @@ import {
   BUNDLE_MANIFEST_PATH,
   BUNDLE_ROOT_PATH,
   NETWORK_COMMAND_PATH,
+  PROMPT_JOB_COMMAND_PATH,
   RUNNER_SERVICE_NAME,
   bundlePathForTarget,
 } from "./paths.js";
 import { renderRunnerService } from "./systemd.js";
 import { bundleEntries, copyTree, inspectTree } from "./tree.js";
 
-const packageNames = ["process", "protocol", "runner", "runner-bundle"] as const;
+const packageNames = [
+  "process",
+  "protocol",
+  "runner",
+  "runner-bundle",
+  "scheduled-prompt-jobs",
+] as const;
 const networkLauncherPath = "/opt/agent-boot/scripts/bin/agent-boot-network";
+const promptJobLauncherPath = "/opt/agent-boot/scripts/bin/agent-boot-prompt-jobs";
 
 const defaultPackageDirectories = (): Record<(typeof packageNames)[number], string> =>
   Object.fromEntries(packageNames.map((name) => [
@@ -133,6 +141,16 @@ const networkLauncher = [
   "",
 ].join("\n");
 
+const promptJobLauncher = [
+  "#!/opt/agent-boot/runtime/bin/node",
+  'import { runPromptJobCommand } from "@agent-boot/scheduled-prompt-jobs";',
+  "process.exitCode = await runPromptJobCommand(process.argv.slice(2), {",
+  '  stderr: line => { process.stderr.write(`${line}\\n`); },',
+  '  stdout: line => { process.stdout.write(`${line}\\n`); },',
+  "});",
+  "",
+].join("\n");
+
 const writeTargetAssets = async (
   root: string,
   options: BuildRunnerBundleOptions,
@@ -168,6 +186,13 @@ const writeTargetAssets = async (
   await symlink(
     relative(dirname(publicNetworkCommand), privateNetworkLauncher),
     publicNetworkCommand,
+  );
+  const privatePromptJobLauncher = join(root, ...promptJobLauncherPath.slice(1).split("/"));
+  const publicPromptJobCommand = join(root, ...PROMPT_JOB_COMMAND_PATH.slice(1).split("/"));
+  await writeFile(privatePromptJobLauncher, promptJobLauncher, 0o755);
+  await symlink(
+    relative(dirname(publicPromptJobCommand), privatePromptJobLauncher),
+    publicPromptJobCommand,
   );
   await writeFile(
     join(root, "etc", "systemd", "system", RUNNER_SERVICE_NAME),

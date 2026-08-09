@@ -80,10 +80,13 @@ const validateSpawnCommand = (command: SpawnCommand): void => {
   }
 };
 
-const environmentFor = (overrides: SpawnCommand['environment']): NodeJS.ProcessEnv => {
+const environmentFor = (command: SpawnCommand): NodeJS.ProcessEnv => {
+  const overrides = command.environment;
   const entries = Object.entries(overrides ?? {});
   const removed = new Set(entries.filter(([, value]) => value === undefined).map(([name]) => name));
-  const inherited = Object.entries(process.env).filter(([name]) => !removed.has(name));
+  const inherited = command.environmentMode === 'replace'
+    ? []
+    : Object.entries(process.env).filter(([name]) => !removed.has(name));
   const defined = entries.filter((entry): entry is [string, string] => entry[1] !== undefined);
   return Object.fromEntries([...inherited, ...defined]);
 };
@@ -143,7 +146,7 @@ export class NodeSpawnAdapter implements SpawnHost {
       child = this.#spawnProcess(command.executable, command.arguments ?? [], {
         cwd: command.cwd,
         detached: true,
-        env: environmentFor(command.environment),
+        env: environmentFor(command),
         shell: false,
         stdio: isTerminalStdio(command.stdio)
           ? [command.stdio.descriptor, command.stdio.descriptor, command.stdio.descriptor]

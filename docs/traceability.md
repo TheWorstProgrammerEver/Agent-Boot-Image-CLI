@@ -34,6 +34,11 @@ numbers refer to `TheWorstProgrammerEver/Agent-Boot-Image-CLI` unless noted.
 - [RYA-197](https://linear.app/ryan-hayward/issue/RYA-197/agent-boot-validate-prompt-template-variables-before-image-write)
   and PR #31 prove prompt declarations and placeholders are checked before
   assembly publication or image write.
+- [RYA-288](https://linear.app/ryan-hayward/issue/RYA-288/hive-mind-add-reusable-scheduled-markdown-prompt-job-component)
+  adds the reusable definition recipe and target-side scheduled Markdown
+  component. Its manifest, fake-Codex, lock, bounded-log, temporary-root unit,
+  rollback, repeat-install re-arm, and finite-trigger tests are kept separate
+  from role-specific prompts and credentials.
 - [RYA-146 physical evidence](validation/rya-146-physical-image-and-first-boot.md)
   is redacted public evidence. Exact target approval, private identifiers,
   credentials, and local operation paths remain outside the repository.

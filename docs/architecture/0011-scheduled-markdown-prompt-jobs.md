@@ -1,0 +1,45 @@
+# 0011: Scheduled Markdown prompt jobs
+
+Status: Accepted
+
+## Context
+
+Small agent appliances need recurring model-assisted work without copying a
+role-specific scheduler into each definition. The editable policy belongs in a
+local Markdown prompt and registry. Credential custody, unit mutation, process
+lifecycle, recovery, and status need deterministic product ownership.
+
+## Decision
+
+Agent Boot packages `@agent-boot/scheduled-prompt-jobs` and its system launcher
+in the private runner bundle. `scheduledPromptJobs()` is a definition recipe:
+it places the definition-local `jobs.json` and Markdown files through ordinary
+assembly assets, then runs the target installer as an ordered automatic step.
+
+The version-1 manifest is exact-key and fail-closed. Before any unit change the
+target validates all identifiers, settings, systemd calendars, canonical prompt
+paths, file custody/modes, and working directories. It renders one exact
+service/timer pair per stable ID, statically verifies the complete candidate,
+and replaces only the registry-owned unit set with rollback. Enabled installs
+restart every timer and require enabled, active, finite-next-trigger evidence.
+
+Each service closes stdin at the systemd boundary; the runner sends the bounded
+prompt bytes to Codex and closes the pipe, replaces the inherited environment,
+uses the declared working directory and timeout, and settles the managed
+process group. Per-job and overlap-group advisory locks serialize work. Codex
+output is drained and discarded; only bounded result metadata is retained.
+
+`effectPolicy=read-only` forbids writes. `reconcile-before-write` injects the
+minimum fail-closed replay and duplicate-reconciliation contract, but a role
+prompt must still define its stable operation identity and authoritative
+reconciliation path. Credentials remain outside the manifest and prompt-job
+component.
+
+## Consequences
+
+Future roles add one Markdown file and one manifest entry, then rerun the same
+installer. They can inspect, canary, enable, re-arm, run once, and uninstall the
+same service namespace without embedding systemd or subprocess logic in role
+prompts. The first live authorization remains a separate operator gate: run a
+read-only canary, verify the exact system service, enable and prove finite
+timers, reboot, and prove the same state before permitting external effects.

@@ -3,6 +3,8 @@ export interface CommandDescriptor {
   readonly arguments?: readonly string[];
   readonly cwd?: string;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  /** Replace the inherited process environment when an explicit minimal environment is required. */
+  readonly environmentMode?: 'inherit' | 'replace';
   /** Non-secret values that must be removed from diagnostics and log representations. */
   readonly sensitiveValues?: readonly string[];
   /** A short operation name. It is redacted before use in diagnostics. */
@@ -83,6 +85,7 @@ const assertArgument = (name: string, value: string): void => {
 };
 
 const environmentName = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const environmentModes = new Set<unknown>(['inherit', 'replace']);
 
 export const validateCommand = (command: CommandDescriptor): void => {
   assertText('executable', command.executable);
@@ -91,6 +94,12 @@ export const validateCommand = (command: CommandDescriptor): void => {
   });
   if (command.cwd !== undefined) assertText('cwd', command.cwd);
   if (command.label !== undefined) assertText('label', command.label.trim());
+  if (command.environmentMode !== undefined && !environmentModes.has(command.environmentMode)) {
+    throw new TypeError('environmentMode must be inherit or replace');
+  }
+  if (command.environmentMode === 'replace' && command.environment === undefined) {
+    throw new TypeError('replace environmentMode requires an explicit environment');
+  }
 
   for (const [name, value] of Object.entries(command.environment ?? {})) {
     if (!environmentName.test(name)) throw new TypeError(`invalid environment variable name: ${name}`);
