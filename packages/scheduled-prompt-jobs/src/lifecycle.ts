@@ -125,12 +125,14 @@ export const runOnce = async (
   const { systemd } = runtimeDependencies(runtime);
   const manifest = await loadRuntimeManifest(runtime, systemd);
   const job = jobFrom(manifest, jobId);
-  if (canary && job.effectPolicy !== "read-only") {
-    throw new PromptJobOperationError("A live canary must use the read-only effect policy.");
-  }
+  const resultStore = resultStoreFor(runtime.account);
+  const previousRunId = (await resultStore.read(job.id))?.runId;
   await systemd.startService(serviceNameFor(job.id));
-  const result = await resultStoreFor(runtime.account).read(job.id);
-  if (result === undefined || (canary && result.result !== "passed")) {
+  const result = await resultStore.read(job.id);
+  if (result?.runId === undefined || result.runId === previousRunId) {
+    throw new PromptJobOperationError("The prompt-job service did not record a fresh result.");
+  }
+  if (canary && result.result !== "passed") {
     throw new PromptJobOperationError("The prompt-job canary did not record a passing result.");
   }
   return result;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
@@ -35,12 +36,19 @@ const executableFor = async (context: PromptJobExecutionContext): Promise<string
 };
 
 const codexArguments = (job: LoadedScheduledPromptJob): readonly string[] => [
+  "--ask-for-approval",
+  "never",
+  "--sandbox",
+  "read-only",
   "exec",
+  "--ignore-user-config",
+  "--ignore-rules",
+  "--strict-config",
+  "--ephemeral",
   "--model",
   job.model,
   "-c",
   `model_reasoning_effort=${JSON.stringify(job.reasoningEffort)}`,
-  "--dangerously-bypass-approvals-and-sandbox",
   "--skip-git-repo-check",
   "-C",
   job.workingDirectoryPath,
@@ -56,6 +64,7 @@ const resultDocument = (
   ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
   finishedAt,
   jobId: job.id,
+  runId: randomUUID(),
   result: result.reason === "timeout"
     ? "timed-out"
     : result.reason === "exit" && result.exitCode === 0
@@ -71,7 +80,7 @@ export const executePromptJob = async (
 ): Promise<PromptJobLastRun> => {
   const now = context.now ?? (() => new Date());
   const startedAt = now().toISOString();
-  const prompt = promptWithExecutionPolicy(job.effectPolicy, await readFile(job.promptPath));
+  const prompt = promptWithExecutionPolicy(await readFile(job.promptPath));
   const executable = await executableFor(context);
   const path = context.path ?? [
     join(context.homeDirectory, ".local", "bin"),

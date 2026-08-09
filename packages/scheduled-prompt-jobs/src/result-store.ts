@@ -13,6 +13,7 @@ export interface PromptJobLastRun {
   readonly finishedAt: string;
   readonly jobId: string;
   readonly result: PromptJobResult;
+  readonly runId?: string;
   readonly startedAt?: string;
   readonly version: 1;
 }
@@ -27,13 +28,20 @@ const parseResult = (input: unknown): PromptJobLastRun => {
   }
   const value = input as Record<string, unknown>;
   const keys = Object.keys(value).sort();
-  const allowed = new Set(["exitCode", "finishedAt", "jobId", "result", "startedAt", "version"]);
+  const allowed = new Set([
+    "exitCode", "finishedAt", "jobId", "result", "runId", "startedAt", "version",
+  ]);
   const exitCode = value.exitCode;
+  const runId = value.runId;
   const startedAt = value.startedAt;
   if (
     keys.some(key => !allowed.has(key)) || value.version !== 1 ||
     typeof value.finishedAt !== "string" || typeof value.jobId !== "string" ||
     !results.has(value.result as PromptJobResult) ||
+    (runId !== undefined && (
+      typeof runId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(runId)
+    )) ||
     (startedAt !== undefined && typeof startedAt !== "string") ||
     (exitCode !== undefined && (
       typeof exitCode !== "number" || !Number.isSafeInteger(exitCode) || exitCode < 0
@@ -44,6 +52,7 @@ const parseResult = (input: unknown): PromptJobLastRun => {
     finishedAt: value.finishedAt,
     jobId: value.jobId,
     result: value.result as PromptJobResult,
+    ...(runId === undefined ? {} : { runId }),
     ...(startedAt === undefined ? {} : { startedAt }),
     version: 1,
   };

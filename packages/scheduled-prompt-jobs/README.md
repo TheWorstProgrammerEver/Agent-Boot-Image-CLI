@@ -14,7 +14,10 @@ unit set and timer policy.
 
 Each Codex process receives its prompt on stdin followed by EOF, an explicit
 working directory, a replaced minimal environment, and a bounded timeout. It
-runs in a managed process group so cancellation and timeout settle descendants.
+runs with approvals disabled, the read-only sandbox, user configuration and
+rules ignored, and an ephemeral session. External effects require a separate
+deterministic executor with durable reservation and reconciliation. The process
+runs in a managed group so cancellation and timeout settle descendants.
 Both a per-job lock and the declared overlap-group lock are held; use the
 role-neutral `heavy-work` group to serialize resource-intensive jobs on a small
 host.

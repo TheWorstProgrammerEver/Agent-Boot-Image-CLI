@@ -49,6 +49,7 @@ export {
 export {
   PromptJobUnitStore,
   type PromptJobUnitRegistry,
+  type UnitPublicationOperations,
   type UnitPublicationHooks,
 } from "./unit-store.js";
 export {

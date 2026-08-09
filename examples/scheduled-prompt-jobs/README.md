@@ -22,15 +22,15 @@ fields:
 | `workingDirectory` | Existing normalized path beneath the account home |
 | `logRetention` | Number of concise run records retained, from 1 through 100 |
 | `overlapGroup` | Shared lock identifier; use `heavy-work` for costly jobs |
-| `effectPolicy` | `read-only` or `reconcile-before-write` |
+| `effectPolicy` | Version 1 requires `read-only` |
 
-`read-only` injects a runtime prohibition on external changes.
-`reconcile-before-write` injects a fail-closed requirement to reconcile a
-pending prior attempt and search the complete authoritative destination for an
-equivalent effect before any new write. A role prompt that may push or open a
-pull request must also describe its durable operation identity and authoritative
-reconciliation procedure; changing the enum alone does not authorize an effect.
-Credential placement remains a separate protected definition concern.
+`read-only` is enforced by launching Codex with approvals disabled, the
+read-only sandbox, ignored user configuration and rules, and an ephemeral
+session. A role prompt may propose an external effect, but it cannot perform
+one through this scheduler. Delivery requires a separate deterministic
+executor with an immutable payload, durable operation identity, reservation,
+receipt validation, and authoritative reconciliation. Credential placement
+remains a separate protected definition concern.
 
 ## Harmless live canary and reboot gate
 
@@ -68,9 +68,10 @@ sudo -n /usr/local/sbin/agent-boot-prompt-jobs install \
 
 For every job, status must show `enabled: true`, `active: true`, and at least one
 finite next realtime or monotonic trigger. Reboot once, rerun `status`, and
-require the same evidence before changing any role prompt to
-`reconcile-before-write`. Repeat installation always restarts each enabled
-timer; it does not rely on `enable --now` to re-arm an already-active timer.
+require the same evidence before connecting any prompt-produced proposal to a
+separately reviewed deterministic effect executor. Repeat installation always
+restarts each enabled timer; it does not rely on `enable --now` to re-arm an
+already-active timer.
 
 Use `run-once` instead of `canary` for an intentionally authorized role job.
 Remove only the exact registered namespace with:

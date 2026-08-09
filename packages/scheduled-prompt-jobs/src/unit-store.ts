@@ -28,6 +28,10 @@ export interface UnitPublicationHooks {
   readonly afterRollback?: () => Promise<void>;
 }
 
+export interface UnitPublicationOperations {
+  readonly removeUnit: (path: string) => Promise<void>;
+}
+
 const unitNamePattern = new RegExp(
   `^${PROMPT_JOB_UNIT_PREFIX}[a-z][a-z0-9-]{0,47}\\.(?:service|timer)$`,
   "u",
@@ -62,10 +66,17 @@ const unitNames = (input: unknown): input is string[] =>
     typeof name === "string" && unitNamePattern.test(name));
 
 export class PromptJobUnitStore {
+  readonly #operations: UnitPublicationOperations;
   readonly #registryDirectory: string;
   readonly #unitsDirectory: string;
 
-  constructor(root = "/") {
+  constructor(
+    root = "/",
+    operations: UnitPublicationOperations = {
+      removeUnit: path => rm(path, { force: true }),
+    },
+  ) {
+    this.#operations = operations;
     this.#registryDirectory = join(root, "var", "lib", "agent-boot", "prompt-jobs");
     this.#unitsDirectory = join(root, "etc", "systemd", "system");
   }
@@ -199,12 +210,22 @@ export class PromptJobUnitStore {
         }
         await hooks.afterPublish();
       } catch (error) {
-        for (const name of published) await rm(this.unitPath(name), { force: true });
-        try {
-          for (const name of moved) {
-            await rename(join(backup, name), this.unitPath(name));
+        let rollbackIncomplete = false;
+        for (const name of published) {
+          try {
+            await this.#operations.removeUnit(this.unitPath(name));
+          } catch {
+            rollbackIncomplete = true;
           }
-        } catch {
+        }
+        for (const name of moved) {
+          try {
+            await rename(join(backup, name), this.unitPath(name));
+          } catch {
+            rollbackIncomplete = true;
+          }
+        }
+        if (rollbackIncomplete) {
           throw new PromptJobUnitRecoveryError(operation);
         }
         if (moved.size > 0 || published.size > 0) {

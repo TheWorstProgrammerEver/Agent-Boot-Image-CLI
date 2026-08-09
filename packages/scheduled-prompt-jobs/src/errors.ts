@@ -19,7 +19,7 @@ export class PromptJobUnitRecoveryError extends Error {
   readonly recoveryPath: string;
 
   constructor(recoveryPath: string) {
-    super("Prompt-job unit publication and rollback both failed; prior units remain at the recovery path.");
+    super("Prompt-job unit rollback did not complete; inspect the preserved recovery path before retrying.");
     this.name = "PromptJobUnitRecoveryError";
     this.recoveryPath = recoveryPath;
   }

@@ -16,7 +16,7 @@ export const SUPPORTED_REASONING_EFFORTS = [
 
 export type PromptJobModel = (typeof SUPPORTED_PROMPT_JOB_MODELS)[number];
 export type PromptJobReasoningEffort = (typeof SUPPORTED_REASONING_EFFORTS)[number];
-export type PromptJobEffectPolicy = "read-only" | "reconcile-before-write";
+export type PromptJobEffectPolicy = "read-only";
 
 export interface ScheduledPromptJob {
   readonly effectPolicy: PromptJobEffectPolicy;

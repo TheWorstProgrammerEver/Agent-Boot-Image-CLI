@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   PromptJobResultStore,
+  PromptJobUnitRecoveryError,
   PromptJobUnitStore,
   installPromptJobs,
   runOnce,
@@ -18,6 +19,7 @@ class FakeSystemd {
   calls = [];
   failNextRestart = false;
   invalidSchedules = new Set();
+  onStartService = async () => undefined;
   states = new Map();
   verified = [];
 
@@ -71,6 +73,7 @@ class FakeSystemd {
 
   async startService(name) {
     this.calls.push(["start", name]);
+    await this.onStartService(name);
   }
 
   async timerState(name) {
@@ -219,6 +222,39 @@ test("unit publication restores earlier moves when a later target is unowned", a
   }
 });
 
+test("unit publication preserves recovery state when rollback cleanup fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-boot-prompt-publication-recovery-"));
+  let rejectRemoval = false;
+  try {
+    const store = new PromptJobUnitStore(root, {
+      removeUnit: async path => {
+        if (rejectRemoval) throw new Error("injected removal failure");
+        await rm(path, { force: true });
+      },
+    });
+    const service = "agent-boot-prompt-job-canary.service";
+    await store.publish(new Map([[service, "old service\n"]]), [], {
+      afterPublish: async () => undefined,
+    });
+    rejectRemoval = true;
+
+    let recoveryPath;
+    await assert.rejects(store.publish(new Map([[service, "new service\n"]]), [service], {
+      afterPublish: async () => {
+        throw new Error("injected publication failure");
+      },
+    }), error => {
+      assert.ok(error instanceof PromptJobUnitRecoveryError);
+      recoveryPath = error.recoveryPath;
+      return true;
+    });
+    assert.equal(await readFile(store.unitPath(service), "utf8"), "old service\n");
+    assert.equal((await stat(recoveryPath)).isDirectory(), true);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("a partially invalid manifest performs no unit verification or mutation", async () => {
   const fixture = await createFixture([
     job({ id: "first", prompt: "first.md" }),
@@ -275,6 +311,15 @@ test("canary starts the exact service and requires read-only passing evidence", 
       finishedAt: new Date().toISOString(),
       jobId: "canary",
       result: "passed",
+      runId: "00000000-0000-4000-8000-000000000001",
+      version: 1,
+    }, 10);
+    await assert.rejects(runOnce(fixture.runtime, "canary", true), /fresh result/u);
+    fixture.systemd.onStartService = async () => resultStore.record({
+      finishedAt: new Date().toISOString(),
+      jobId: "canary",
+      result: "passed",
+      runId: "00000000-0000-4000-8000-000000000002",
       version: 1,
     }, 10);
     assert.equal((await runOnce(fixture.runtime, "canary", true)).result, "passed");
@@ -283,11 +328,6 @@ test("canary starts the exact service and requires read-only passing evidence", 
       ["start", "agent-boot-prompt-job-canary.service"],
     );
 
-    await writeFile(fixture.manifestPath, JSON.stringify({
-      jobs: [job({ effectPolicy: "reconcile-before-write" })],
-      version: 1,
-    }), { mode: 0o600 });
-    await assert.rejects(runOnce(fixture.runtime, "canary", true), /must use the read-only/u);
   } finally {
     await rm(fixture.root, { force: true, recursive: true });
   }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -78,6 +79,7 @@ export const runPromptJob = async (
       finishedAt: new Date().toISOString(),
       jobId: job.id,
       result: "skipped-overlap",
+      runId: randomUUID(),
       version: 1,
     }, job.logRetention);
     return 0;
@@ -89,6 +91,7 @@ export const runPromptJob = async (
     finishedAt: new Date().toISOString(),
     jobId: job.id,
     result: completion.reason === "timeout" ? "timed-out" : "failed",
+    runId: randomUUID(),
     version: 1,
   }, job.logRetention);
   return completion.reason === "timeout" ? 71 : 70;

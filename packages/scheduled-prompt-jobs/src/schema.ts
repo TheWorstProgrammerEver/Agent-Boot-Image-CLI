@@ -109,7 +109,7 @@ const job = (input: unknown, path: string): ScheduledPromptJob => {
     effectPolicy: member(
       value.effectPolicy,
       `${path}.effectPolicy`,
-      ["read-only", "reconcile-before-write"] as const,
+      ["read-only"] as const,
     ),
     id: identifier(value.id, `${path}.id`),
     logRetention: integer(value.logRetention, `${path}.logRetention`, 1, 100),

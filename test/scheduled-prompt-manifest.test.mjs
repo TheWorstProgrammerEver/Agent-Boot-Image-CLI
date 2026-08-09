@@ -41,6 +41,7 @@ test("versioned scheduled prompt manifests reject malformed execution policy", (
     [validManifest([validJob({ workingDirectory: "../escape" })]), /relative path/u],
     [validManifest([validJob({ model: "future-model" })]), /Expected one of/u],
     [validManifest([validJob({ reasoningEffort: "extreme" })]), /Expected one of/u],
+    [validManifest([validJob({ effectPolicy: "reconcile-before-write" })]), /Expected one of/u],
     [validManifest([validJob({ onCalendar: "daily\nInjected=true" })]), /calendar/u],
     [validManifest([validJob({ logRetention: 0 })]), /between 1 and 100/u],
     [validManifest([validJob(), validJob()]), /Duplicate job/u],

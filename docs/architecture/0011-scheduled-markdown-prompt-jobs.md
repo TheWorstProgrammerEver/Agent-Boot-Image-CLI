@@ -29,11 +29,13 @@ uses the declared working directory and timeout, and settles the managed
 process group. Per-job and overlap-group advisory locks serialize work. Codex
 output is drained and discarded; only bounded result metadata is retained.
 
-`effectPolicy=read-only` forbids writes. `reconcile-before-write` injects the
-minimum fail-closed replay and duplicate-reconciliation contract, but a role
-prompt must still define its stable operation identity and authoritative
-reconciliation path. Credentials remain outside the manifest and prompt-job
-component.
+Version 1 accepts only `effectPolicy=read-only`. Codex runs with approvals
+disabled, the read-only sandbox, user configuration and rules ignored, and an
+ephemeral session. External writes are outside this component: they require a
+separate deterministic executor that owns immutable payload identity, durable
+reservation, receipt validation, and authoritative reconciliation before a
+prompt-produced proposal can have an effect. Credentials remain outside the
+manifest, model process, and prompt-job component.
 
 ## Consequences
 
@@ -42,4 +44,5 @@ installer. They can inspect, canary, enable, re-arm, run once, and uninstall the
 same service namespace without embedding systemd or subprocess logic in role
 prompts. The first live authorization remains a separate operator gate: run a
 read-only canary, verify the exact system service, enable and prove finite
-timers, reboot, and prove the same state before permitting external effects.
+timers, reboot, and prove the same state. Any later external-effect delivery
+remains a separately reviewed deterministic-executor integration.

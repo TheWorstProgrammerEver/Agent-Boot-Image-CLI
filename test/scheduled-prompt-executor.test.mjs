@@ -55,7 +55,7 @@ const fixture = async () => {
   return { executable, root };
 };
 
-test("fake Codex receives the policy and prompt followed by EOF in a minimal environment", async () => {
+test("fake Codex receives enforced read-only policy, prompt EOF, and a minimal environment", async () => {
   const { executable, root } = await fixture();
   try {
     const resultStore = new PromptJobResultStore(join(root, "state"));
@@ -89,6 +89,18 @@ test("fake Codex receives the policy and prompt followed by EOF in a minimal env
       "USER",
     ]);
     assert.equal(evidence.environment.HOME, root);
+    assert.deepEqual(evidence.arguments.slice(0, 9), [
+      "--ask-for-approval",
+      "never",
+      "--sandbox",
+      "read-only",
+      "exec",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--strict-config",
+      "--ephemeral",
+    ]);
+    assert.equal(evidence.arguments.includes("--dangerously-bypass-approvals-and-sandbox"), false);
     assert.equal(evidence.arguments.at(-1), "-");
 
     const log = (await readFile(join(root, "state", "canary", "runs.jsonl"), "utf8"))
@@ -97,6 +109,7 @@ test("fake Codex receives the policy and prompt followed by EOF in a minimal env
     const lastRun = await readFile(join(root, "state", "canary", "last-run.json"), "utf8");
     assert.doesNotMatch(lastRun, /Produce a local report|arbitrary private/u);
     assert.equal(JSON.parse(lastRun).result, "passed");
+    assert.match(JSON.parse(lastRun).runId, /^[0-9a-f-]{36}$/u);
 
     await writeFile(join(root, "state", "canary", "last-run.json"), JSON.stringify({
       body: "arbitrary private response",
