@@ -73,6 +73,13 @@ test("canonical definitions are JSON-safe and survive canonical validation", () 
   assert.doesNotMatch(serialized, /contents|materialized|not-a-real-secret/u);
 });
 
+test("definitions can explicitly request unattended sudo for a dedicated agent account", () => {
+  const input = validDefinitionInput();
+  input.account.unattendedSudo = true;
+
+  assert.equal(defineAgent(input).account.unattendedSudo, true);
+});
+
 test("accepted command arguments satisfy the canonical runner-plan boundary", () => {
   const input = validDefinitionInput();
   input.steps[3].command.arguments = ["x".repeat(1024)];

@@ -29,6 +29,7 @@ import {
   assertUnique,
   fail,
   parseArray,
+  parseBoolean,
   parseHostname,
   parseIdentifier,
   parseObject,
@@ -49,6 +50,7 @@ export interface AgentDefinitionInput {
   readonly account: {
     readonly username: string;
     readonly initialPassword?: SecretInput;
+    readonly unattendedSudo?: boolean;
   };
   readonly network?: {
     readonly hostname: string;
@@ -74,6 +76,7 @@ export interface AgentDefinition {
   account: {
     username: string;
     initialPassword?: { secretId: string };
+    unattendedSudo?: boolean;
   };
   network?: {
     hostname: string;
@@ -121,7 +124,7 @@ const parseAccount = (
   registry: ResourceRegistry,
   path: string,
 ): AgentDefinition["account"] => {
-  const value = parseObject(input, path, ["username", "initialPassword"]);
+  const value = parseObject(input, path, ["username", "initialPassword", "unattendedSudo"]);
   return {
     username: parseUsername(required(value, "username", path), `${path}.username`),
     ...(value.initialPassword === undefined
@@ -131,6 +134,14 @@ const parseAccount = (
             value.initialPassword,
             registry,
             `${path}.initialPassword`,
+          ),
+        }),
+    ...(value.unattendedSudo === undefined
+      ? {}
+      : {
+          unattendedSudo: parseBoolean(
+            value.unattendedSudo,
+            `${path}.unattendedSudo`,
           ),
         }),
   };

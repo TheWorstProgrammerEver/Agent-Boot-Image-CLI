@@ -21,7 +21,8 @@ step is the successful `codex login status` gate. The authored sequence then:
 4. checks out reviewed GitHub helper, skills, and Mind Maintainer revisions;
 5. installs the askpass helpers and Codex skills;
 6. installs and enables the Mind Maintainer service/timer;
-7. renders a non-secret audit prompt and runs Codex;
+7. renders a non-secret boot and setup audit prompt and runs Codex, allowing
+   only recipe-described, local, idempotent repair;
 8. deterministically verifies the prompt report and all prior setup; and
 9. reaches terminal ready state only when the runner checkpoints success.
 
@@ -51,9 +52,12 @@ without exposing interactive output. The Codex provider slice already uses it
 for device authentication, so the recipe does not add a second auth command.
 
 Use `renderPrompt()` plus `runProvider()` only for work that benefits from
-reasoning or agent-specific interpretation. In this recipe Codex audits
-metadata and writes a report; it does not install packages, mutate credentials,
-or own service state. A deterministic step validates the result afterward.
+reasoning or agent-specific interpretation. In this recipe Codex audits the
+boot journal, checkpoint metadata, filesystem metadata, and service status. It
+may repair only local, idempotent drift whose correction is already established
+by the installed recipe; it must not edit checkpoints, broaden permissions,
+mutate credentials, or perform external effects. A deterministic step validates
+the result afterward.
 
 ## Operator-only secret inputs
 

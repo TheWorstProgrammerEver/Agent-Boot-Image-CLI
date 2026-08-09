@@ -93,6 +93,11 @@ export const optional = (
   key: string,
 ): unknown => record[key];
 
+export const parseBoolean = (input: unknown, path: string): boolean => {
+  if (typeof input !== "boolean") fail(path, "Expected a boolean.");
+  return input;
+};
+
 export const parseString = (
   input: unknown,
   path: string,

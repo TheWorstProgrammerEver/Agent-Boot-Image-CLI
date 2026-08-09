@@ -32,6 +32,7 @@ export const readCheckpoint = async path => JSON.parse(await readFile(path, "utf
 
 export const writeCheckpoint = async (path, value, mode = 0o600) => {
   await mkdir(dirname(path), { recursive: true });
+  await chmod(dirname(path), 0o700);
   await writeFile(path, typeof value === "string" ? value : `${JSON.stringify(value)}\n`, { mode });
   await chmod(path, mode);
 };

@@ -43,7 +43,7 @@ export default defineAgent({
     architecture: "arm64",
     boards: ["raspberry-pi-5"],
   }),
-  account: { username: "my-user" },
+  account: { username: "my-user", unattendedSudo: true },
   prompts: [profilePrompt],
   steps: [
     setEnvironment("set-agent-name", "AGENT_NAME", "My Agent"),
@@ -59,6 +59,12 @@ The canonical schema rejects unknown fields and validates identity, Unix account
 names, curated-OS compatibility selectors, environment keys, target paths,
 resource references, provider/prompt ordering, and every step variant before a
 downstream synthesizer receives the definition.
+
+`account.unattendedSudo` is an explicit dedicated-appliance capability. When
+true, the supported Raspberry Pi adapter provisions root-owned mode-`0440`
+passwordless sudo policy for the agent account before first boot. Leave it
+unset for accounts that must not receive unattended root authority; automatic
+steps in those definitions must not assume `sudo -n` works.
 
 ## Codex vertical slice
 

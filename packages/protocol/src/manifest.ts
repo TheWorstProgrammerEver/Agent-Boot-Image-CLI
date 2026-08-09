@@ -17,6 +17,7 @@ import {
   fail,
   optional,
   parseArray,
+  parseBoolean,
   parseInteger,
   parseLiteral,
   parseObject,
@@ -51,6 +52,7 @@ export interface PromptDescriptor {
 export interface AccountBootstrapDescriptor {
   username: string;
   initialPassword?: SecretReference;
+  unattendedSudo?: boolean;
 }
 
 export interface WifiBootstrapDescriptor {
@@ -126,13 +128,17 @@ const parsePrompt: Parser<PromptDescriptor> = (input, path) => {
 };
 
 const parseAccount: Parser<AccountBootstrapDescriptor> = (input, path) => {
-  const value = parseObject(input, path, ["username", "initialPassword"]);
+  const value = parseObject(input, path, ["username", "initialPassword", "unattendedSudo"]);
   const initialPassword = optional(value, "initialPassword");
+  const unattendedSudo = optional(value, "unattendedSudo");
   return {
     username: parseUsername(required(value, "username", path), `${path}.username`),
     ...(initialPassword === undefined
       ? {}
       : { initialPassword: parseSecretReference(initialPassword, `${path}.initialPassword`) }),
+    ...(unattendedSudo === undefined
+      ? {}
+      : { unattendedSudo: parseBoolean(unattendedSudo, `${path}.unattendedSudo`) }),
   };
 };
 

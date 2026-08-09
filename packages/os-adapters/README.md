@@ -42,6 +42,14 @@ Account password
 hashing uses deliberate stdin through an injected command host, and repeat customization reuses the
 existing SHA-512 crypt salt so the image remains byte-stable.
 
+Every directory created below a `user-home` asset placement is owned by the
+target account, so a setup step can safely tighten or extend `.ssh`, `.config`,
+durable-note, and similar trees. When the manifest explicitly requests
+`account.unattendedSudo`, the adapter also installs a root-owned mode-`0440`
+sudoers fragment for that account before the runner can start. The capability
+is opt-in because it grants the model-controlled dedicated account unattended
+root authority.
+
 Because FAT32 cannot store per-file POSIX ownership or mode bits, the mounted `bootfs` contract is
 uniform root ownership with directories exposed as `0700` and files as `0600`. Image orchestration
 must mount it with equivalent `uid=0,gid=0,fmask=0177,dmask=0077` options and report those

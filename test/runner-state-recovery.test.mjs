@@ -323,6 +323,7 @@ test("startup removes only interrupted checkpoint temporary artifacts", async ()
   try {
     const directory = dirname(fixture.path);
     await mkdir(directory, { recursive: true });
+    await chmod(directory, 0o700);
     const interrupted = join(directory, `.${basename(fixture.path)}.123.interrupted.tmp`);
     const unrelated = join(directory, "unrelated.tmp");
     await writeFile(interrupted, "partial", { mode: 0o600 });
