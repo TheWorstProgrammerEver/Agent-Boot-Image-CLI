@@ -64,7 +64,10 @@ downstream synthesizer receives the definition.
 true, the supported Raspberry Pi adapter provisions root-owned mode-`0440`
 passwordless sudo policy for the agent account before first boot. Leave it
 unset for accounts that must not receive unattended root authority; automatic
-steps in those definitions must not assume `sudo -n` works.
+steps in those definitions must not assume `sudo -n` works. The supported
+adapter writes an empty root-owned marker when the capability is false or
+absent, so re-customizing a previously privileged image actively neutralizes
+the exact policy it generated.
 
 ## Codex vertical slice
 

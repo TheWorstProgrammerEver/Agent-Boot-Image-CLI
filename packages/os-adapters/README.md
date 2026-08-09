@@ -48,7 +48,9 @@ durable-note, and similar trees. When the manifest explicitly requests
 `account.unattendedSudo`, the adapter also installs a root-owned mode-`0440`
 sudoers fragment for that account before the runner can start. The capability
 is opt-in because it grants the model-controlled dedicated account unattended
-root authority.
+root authority. When the capability is false or absent, the adapter writes the
+same managed path as an empty root-owned mode-`0440` file. This safely revokes a
+grant left by an earlier customization without deleting an unrecognized path.
 
 Because FAT32 cannot store per-file POSIX ownership or mode bits, the mounted `bootfs` contract is
 uniform root ownership with directories exposed as `0700` and files as `0600`. Image orchestration

@@ -251,14 +251,14 @@ export const createRootPlan = async (
     0o644,
     rootIdentity,
   );
-  if (assembly.documents.manifest.bootstrap.account.unattendedSudo === true) {
-    plan.file(
-      "etc/sudoers.d/90-agent-boot-unattended",
-      Buffer.from(`${account.username} ALL=(ALL:ALL) NOPASSWD: ALL\n`, "utf8"),
-      0o440,
-      rootIdentity,
-    );
-  }
+  plan.file(
+    "etc/sudoers.d/90-agent-boot-unattended",
+    assembly.documents.manifest.bootstrap.account.unattendedSudo === true
+      ? Buffer.from(`${account.username} ALL=(ALL:ALL) NOPASSWD: ALL\n`, "utf8")
+      : new Uint8Array(),
+    0o440,
+    rootIdentity,
+  );
   plan.file("etc/fstab", protectedBootFstab, 0o644, rootIdentity);
   plan.file("var/lib/NetworkManager/NetworkManager.state", networkManagerEnabledState, 0o644, rootIdentity);
   if (networkManagerProfile !== undefined) {

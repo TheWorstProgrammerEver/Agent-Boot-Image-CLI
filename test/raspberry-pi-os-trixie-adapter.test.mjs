@@ -257,7 +257,7 @@ test("renders NetworkManager keyfile values without line or whitespace injection
   assert.match(profile, /^psk=\\sleading\\\\value\\n\\s$/mu);
 });
 
-test("does not grant unattended sudo when the account capability is absent", async () => {
+test("neutralizes unattended sudo when the account capability is absent", async () => {
   const fixture = await createAdapterFixture();
   try {
     const manifestPath = join(fixture.assembly, "manifest.json");
@@ -267,13 +267,50 @@ test("does not grant unattended sudo when the account capability is absent", asy
 
     const password = passwordHasher();
     await customizeRaspberryPiOsTrixie(fixture.options({ passwordHasher: password.hasher }));
-    await assert.rejects(
-      readFile(join(fixture.systemRoot, "etc/sudoers.d/90-agent-boot-unattended")),
-      (error) => error?.code === "ENOENT",
+    const sudoersPath = join(fixture.systemRoot, "etc/sudoers.d/90-agent-boot-unattended");
+    assert.equal(await readFile(sudoersPath, "utf8"), "");
+    assert.equal(await mode(sudoersPath), 0o440);
+    assert.deepEqual(
+      fixture.ownership.identities.get(sudoersPath),
+      { gid: 0, uid: 0 },
     );
   } finally {
     await fixture.cleanup();
   }
+});
+
+test("re-customization revokes a prior unattended sudo grant", async t => {
+  for (const [name, update] of [
+    ["true to absent", account => delete account.unattendedSudo],
+    ["true to false", account => { account.unattendedSudo = false; }],
+  ]) await t.test(name, async () => {
+    const fixture = await createAdapterFixture();
+    try {
+      const password = passwordHasher(2);
+      const options = fixture.options({ passwordHasher: password.hasher });
+      const sudoersPath = join(fixture.systemRoot, "etc/sudoers.d/90-agent-boot-unattended");
+      await customizeRaspberryPiOsTrixie(options);
+      assert.equal(
+        await readFile(sudoersPath, "utf8"),
+        "my-user ALL=(ALL:ALL) NOPASSWD: ALL\n",
+      );
+
+      const manifestPath = join(fixture.assembly, "manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      update(manifest.bootstrap.account);
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+      await customizeRaspberryPiOsTrixie(options);
+
+      assert.equal(await readFile(sudoersPath, "utf8"), "");
+      assert.equal(await mode(sudoersPath), 0o440);
+      assert.deepEqual(
+        fixture.ownership.identities.get(sudoersPath),
+        { gid: 0, uid: 0 },
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });
 
 test("rejects partition label and shape drift before modifying either root", async t => {
