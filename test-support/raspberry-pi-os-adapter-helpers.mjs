@@ -80,6 +80,7 @@ const createAssembly = async root => {
   const manifestPath = join(assembly, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.bootstrap.account.initialPassword.secretId = "account-password";
+  manifest.bootstrap.account.unattendedSudo = true;
   manifest.bootstrap.network = {
     hostname: "fixture-agent",
     wifi: { ssid: "fixture-network", passphrase: { secretId: "wifi-passphrase" } },

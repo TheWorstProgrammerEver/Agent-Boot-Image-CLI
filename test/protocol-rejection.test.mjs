@@ -71,6 +71,10 @@ test("bootstrap and ordered runner data cannot cross their schema boundaries", (
   const planWithBootstrap = clone(runnerPlan);
   planWithBootstrap.bootstrap = {};
   rejects(runnerPlanSchema, planWithBootstrap, /bootstrap.*Unknown field/);
+
+  const invalidUnattendedSudo = clone(manifest);
+  invalidUnattendedSudo.bootstrap.account.unattendedSudo = "yes";
+  rejects(manifestSchema, invalidUnattendedSudo, /unattendedSudo.*boolean/);
 });
 
 test("paths, identifiers, environment keys, digests, and URLs are validated", () => {

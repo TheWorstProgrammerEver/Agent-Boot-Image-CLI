@@ -54,7 +54,11 @@ export default defineAgent({
     architecture: "arm64",
     boards: ["raspberry-pi-5"],
   }),
-  account: { username: "my-user", initialPassword: accountAuthentication },
+  account: {
+    username: "my-user",
+    initialPassword: accountAuthentication,
+    unattendedSudo: true,
+  },
   network: {
     hostname: "my-agent",
     wifi: {

@@ -75,16 +75,22 @@ class Plan {
     throw adapterError("invalid-input", "Target file placements conflict.");
   }
 
-  directory(path: string, mode: number, identity: ImageIdentity): void {
+  directory(
+    path: string,
+    mode: number,
+    identity: ImageIdentity,
+    ancestorIdentity: ImageIdentity = rootIdentity,
+    ancestorMode = 0o755,
+  ): void {
     const segments = path.split("/");
     for (let index = 1; index <= segments.length; index += 1) {
       const parent = segments.slice(0, index).join("/");
       const isLeaf = index === segments.length;
       if (!isLeaf && this.#entries.has(parent)) continue;
       this.add({
-        identity: isLeaf ? identity : rootIdentity,
+        identity: isLeaf ? identity : ancestorIdentity,
         kind: "directory",
-        mode: isLeaf ? mode : 0o755,
+        mode: isLeaf ? mode : ancestorMode,
         path: parent,
       });
     }
@@ -221,6 +227,10 @@ export const createRootPlan = async (
       ? asset.placement.path
       : `${account.homeDirectory.slice(1)}/${asset.placement.path}`;
     const identity = asset.placement.scope === "system" ? rootIdentity : account;
+    if (asset.placement.scope === "user-home") {
+      const parent = target.slice(0, target.lastIndexOf("/"));
+      plan.directory(parent, 0o750, account, account, 0o750);
+    }
     plan.file(target, contents, asset.placement.scope === "user-home" ? 0o600 : assetMode(asset.path), identity);
   }
 
@@ -239,6 +249,14 @@ export const createRootPlan = async (
       "",
     ].join("\n"), "utf8"),
     0o644,
+    rootIdentity,
+  );
+  plan.file(
+    "etc/sudoers.d/90-agent-boot-unattended",
+    assembly.documents.manifest.bootstrap.account.unattendedSudo === true
+      ? Buffer.from(`${account.username} ALL=(ALL:ALL) NOPASSWD: ALL\n`, "utf8")
+      : new Uint8Array(),
+    0o440,
     rootIdentity,
   );
   plan.file("etc/fstab", protectedBootFstab, 0o644, rootIdentity);

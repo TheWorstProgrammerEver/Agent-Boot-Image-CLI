@@ -172,6 +172,9 @@ export const customizeRaspberryPiOsTrixie = async (
     assertion("bootfs-runtime-mount", "/etc/fstab"),
     assertion("account-bootstrap", "/boot/firmware/userconf"),
     assertion("ssh-bootstrap", "/boot/firmware/ssh"),
+    ...(inputs.assembly.documents.manifest.bootstrap.account.unattendedSudo === true
+      ? [assertion("unattended-sudo", "/etc/sudoers.d/90-agent-boot-unattended")]
+      : []),
     ...(wifi === undefined ? [] : [assertion("netplan-v2", "/boot/firmware/network-config")]),
     ...(wifi === undefined ? [] : [assertion(
       "network-manager-wifi",

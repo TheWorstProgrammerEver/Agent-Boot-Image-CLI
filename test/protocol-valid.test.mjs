@@ -19,6 +19,7 @@ test("valid assembly fixtures cover the canonical layout and descriptor variants
   const parsed = assemblyDocumentsSchema.parse(documents);
 
   assert.equal(parsed.manifest.schemaVersion, SCHEMA_VERSION);
+  assert.equal(parsed.manifest.bootstrap.account.unattendedSudo, true);
   assert.deepEqual(parsed.manifest.files, {
     runnerPlan: ASSEMBLY_PATHS.runnerPlan,
     osLock: ASSEMBLY_PATHS.osLock,

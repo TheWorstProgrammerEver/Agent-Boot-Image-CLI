@@ -16,7 +16,8 @@
       "username": "reviewer",
       "initialPassword": {
         "secretId": "initial-password"
-      }
+      },
+      "unattendedSudo": true
     },
     "network": {
       "hostname": "reviewer-agent",

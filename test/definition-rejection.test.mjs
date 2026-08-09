@@ -20,6 +20,10 @@ test("identity, Unix username, and definition URL fail independently", () => {
   rejects((input) => { input.agent.id = "My Agent"; }, /agent\.id.*lowercase identifier/u);
   rejects((input) => { input.agent.displayName = ""; }, /agent\.displayName.*1-128/u);
   rejects((input) => { input.account.username = "Root User"; }, /username.*Unix username/u);
+  rejects(
+    (input) => { input.account.unattendedSudo = "yes"; },
+    /account\.unattendedSudo.*boolean/u,
+  );
   rejects((input) => { input.definitionUrl = "./my-agent.ts"; }, /absolute file URL/u);
   rejects(
     (input) => { input.definitionUrl = "file://remote-host/my-agent.ts"; },

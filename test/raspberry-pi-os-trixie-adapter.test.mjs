@@ -86,6 +86,8 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/assets/scripts/prepare")), 0o755);
     assert.equal(await mode(join(systemRoot, "opt/agent-boot/scripts/prepare")), 0o755);
     assert.equal(await mode(join(systemRoot, "home/my-user/.config/agent/config.json")), 0o600);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.config")), 0o750);
+    assert.equal(await mode(join(systemRoot, "home/my-user/.config/agent")), 0o750);
     assert.equal(await mode(join(systemRoot, "home/my-user/.local")), 0o750);
     assert.equal(await mode(join(systemRoot, "home/my-user/.local/bin")), 0o750);
     assert.equal(await mode(join(systemRoot, "home/my-user/.local/lib")), 0o750);
@@ -157,6 +159,9 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       await readFile(join(systemRoot, "etc/ssh/sshd_config.d/20-agent-boot.conf"), "utf8"),
       /^PasswordAuthentication yes$/mu,
     );
+    const sudoersPath = join(systemRoot, "etc/sudoers.d/90-agent-boot-unattended");
+    assert.equal(await readFile(sudoersPath, "utf8"), "my-user ALL=(ALL:ALL) NOPASSWD: ALL\n");
+    assert.equal(await mode(sudoersPath), 0o440);
     assert.equal(await readFile(join(systemRoot, "etc/hostname"), "utf8"), "fixture-agent\n");
     assert.equal(
       await readFile(join(systemRoot, "var/lib/NetworkManager/NetworkManager.state"), "utf8"),
@@ -190,6 +195,14 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
       { gid: 1000, uid: 1000 },
     );
     assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "home/my-user/.config")),
+      { gid: 1000, uid: 1000 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(join(systemRoot, "home/my-user/.config/agent")),
+      { gid: 1000, uid: 1000 },
+    );
+    assert.deepEqual(
       fixture.ownership.identities.get(join(systemRoot, "home/my-user/.profile")),
       { gid: 1000, uid: 1000 },
     );
@@ -199,6 +212,10 @@ test("customizes the pinned official Trixie identity fixture and is byte-stable 
     );
     assert.deepEqual(
       fixture.ownership.identities.get(join(systemRoot, "etc/agent-boot/manifest.json")),
+      { gid: 0, uid: 0 },
+    );
+    assert.deepEqual(
+      fixture.ownership.identities.get(sudoersPath),
       { gid: 0, uid: 0 },
     );
     assert.deepEqual(
@@ -238,6 +255,62 @@ test("renders NetworkManager keyfile values without line or whitespace injection
   })).toString("utf8");
   assert.match(profile, /^ssid=\\sfixture\\\\network\\n\\s$/mu);
   assert.match(profile, /^psk=\\sleading\\\\value\\n\\s$/mu);
+});
+
+test("neutralizes unattended sudo when the account capability is absent", async () => {
+  const fixture = await createAdapterFixture();
+  try {
+    const manifestPath = join(fixture.assembly, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    delete manifest.bootstrap.account.unattendedSudo;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const password = passwordHasher();
+    await customizeRaspberryPiOsTrixie(fixture.options({ passwordHasher: password.hasher }));
+    const sudoersPath = join(fixture.systemRoot, "etc/sudoers.d/90-agent-boot-unattended");
+    assert.equal(await readFile(sudoersPath, "utf8"), "");
+    assert.equal(await mode(sudoersPath), 0o440);
+    assert.deepEqual(
+      fixture.ownership.identities.get(sudoersPath),
+      { gid: 0, uid: 0 },
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("re-customization revokes a prior unattended sudo grant", async t => {
+  for (const [name, update] of [
+    ["true to absent", account => delete account.unattendedSudo],
+    ["true to false", account => { account.unattendedSudo = false; }],
+  ]) await t.test(name, async () => {
+    const fixture = await createAdapterFixture();
+    try {
+      const password = passwordHasher(2);
+      const options = fixture.options({ passwordHasher: password.hasher });
+      const sudoersPath = join(fixture.systemRoot, "etc/sudoers.d/90-agent-boot-unattended");
+      await customizeRaspberryPiOsTrixie(options);
+      assert.equal(
+        await readFile(sudoersPath, "utf8"),
+        "my-user ALL=(ALL:ALL) NOPASSWD: ALL\n",
+      );
+
+      const manifestPath = join(fixture.assembly, "manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      update(manifest.bootstrap.account);
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+      await customizeRaspberryPiOsTrixie(options);
+
+      assert.equal(await readFile(sudoersPath, "utf8"), "");
+      assert.equal(await mode(sudoersPath), 0o440);
+      assert.deepEqual(
+        fixture.ownership.identities.get(sudoersPath),
+        { gid: 0, uid: 0 },
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });
 
 test("rejects partition label and shape drift before modifying either root", async t => {
