@@ -210,26 +210,32 @@ export class PromptJobUnitStore {
         }
         await hooks.afterPublish();
       } catch (error) {
-        let rollbackIncomplete = false;
+        let cleanupIncomplete = false;
         for (const name of published) {
           try {
             await this.#operations.removeUnit(this.unitPath(name));
           } catch {
-            rollbackIncomplete = true;
+            cleanupIncomplete = true;
           }
         }
+        let restorationIncomplete = false;
         for (const name of moved) {
           try {
             await rename(join(backup, name), this.unitPath(name));
           } catch {
-            rollbackIncomplete = true;
+            restorationIncomplete = true;
           }
         }
-        if (rollbackIncomplete) {
-          throw new PromptJobUnitRecoveryError(operation);
+        let hookIncomplete = false;
+        if (!restorationIncomplete && (moved.size > 0 || published.size > 0)) {
+          try {
+            await hooks.afterRollback?.();
+          } catch {
+            hookIncomplete = true;
+          }
         }
-        if (moved.size > 0 || published.size > 0) {
-          await hooks.afterRollback?.();
+        if (cleanupIncomplete || restorationIncomplete || hookIncomplete) {
+          throw new PromptJobUnitRecoveryError(operation);
         }
         throw error;
       }

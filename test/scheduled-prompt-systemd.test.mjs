@@ -18,6 +18,7 @@ import {
 class FakeSystemd {
   calls = [];
   failNextRestart = false;
+  failNextState = false;
   invalidSchedules = new Set();
   onStartService = async () => undefined;
   states = new Map();
@@ -78,6 +79,10 @@ class FakeSystemd {
 
   async timerState(name) {
     this.calls.push(["state", name]);
+    if (this.failNextState) {
+      this.failNextState = false;
+      throw new Error("injected timer-state failure");
+    }
     return this.states.get(name) ?? {
       active: false,
       enabled: false,
@@ -252,6 +257,62 @@ test("unit publication preserves recovery state when rollback cleanup fails", as
     assert.equal((await stat(recoveryPath)).isDirectory(), true);
   } finally {
     await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("install restores the prior timer policy when rollback cleanup fails", async () => {
+  const fixture = await createFixture([job()]);
+  let rejectRemoval = false;
+  fixture.runtime.unitStore = new PromptJobUnitStore(fixture.root, {
+    removeUnit: async path => {
+      if (rejectRemoval) throw new Error("injected removal failure");
+      await rm(path, { force: true });
+    },
+  });
+  try {
+    await installPromptJobs(fixture.runtime, true);
+    const timerPath = join(
+      fixture.root,
+      "etc/systemd/system/agent-boot-prompt-job-canary.timer",
+    );
+    const original = await readFile(timerPath, "utf8");
+    await writeFile(fixture.manifestPath, JSON.stringify({
+      jobs: [job({ onCalendar: "*-*-* 04:00:00" })],
+      version: 1,
+    }), { mode: 0o600 });
+    fixture.systemd.calls = [];
+    fixture.systemd.failNextState = true;
+    rejectRemoval = true;
+
+    let recoveryPath;
+    await assert.rejects(installPromptJobs(fixture.runtime, true), error => {
+      assert.ok(error instanceof PromptJobUnitRecoveryError);
+      recoveryPath = error.recoveryPath;
+      return true;
+    });
+
+    assert.equal(await readFile(timerPath, "utf8"), original);
+    assert.deepEqual(
+      fixture.systemd.calls.filter(([operation]) => [
+        "disable",
+        "daemon-reload",
+        "enable",
+        "restart",
+      ].includes(operation)),
+      [
+        ["daemon-reload"],
+        ["enable", timerNameFor("canary")],
+        ["restart", timerNameFor("canary")],
+        ["disable", timerNameFor("canary")],
+        ["daemon-reload"],
+        ["enable", timerNameFor("canary")],
+        ["restart", timerNameFor("canary")],
+      ],
+    );
+    assert.equal(fixture.systemd.states.get(timerNameFor("canary")).active, true);
+    assert.equal((await stat(recoveryPath)).isDirectory(), true);
+  } finally {
+    await rm(fixture.root, { force: true, recursive: true });
   }
 });
 

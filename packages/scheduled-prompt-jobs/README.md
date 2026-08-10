@@ -22,6 +22,12 @@ Both a per-job lock and the declared overlap-group lock are held; use the
 role-neutral `heavy-work` group to serialize resource-intensive jobs on a small
 host.
 
+On a target-compatible host with an installed, authenticated Codex CLI, run
+`npm run test:codex-sandbox-contract` from the repository root. The isolated
+contract reads a randomized fixture marker, attempts one harmless workspace
+write through the production scheduled-job command boundary, requires the
+read-only sandbox to deny it, and removes the temporary fixture afterward.
+
 The component discards Codex stdout and stderr. It stores only a bounded JSONL
 history and concise `last-run.json` under
 `~/.local/state/agent-boot-prompt-jobs/<job-id>/`; prompt bytes and arbitrary
