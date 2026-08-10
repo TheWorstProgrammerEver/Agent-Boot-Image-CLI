@@ -61,6 +61,22 @@ The operator still owns target provenance and disposability. `drives list` is a
 read-only aid, not approval. Never copy private serials or stable device IDs into
 public evidence; retain the exact approval in a restricted operator record.
 
+## GitHub App helper boundary
+
+The maintained [GitHub App helper recipe](../recipes/github-app-helpers/README.md)
+keeps both short-lived bearer values outside child-process arguments and
+exported environments. The token helper passes curl's authorization header in
+a standard-input config and suppresses raw transport failures. The GitHub CLI
+wrapper uses an owner-only, symlink-resistant temporary config directory and
+removes it on success, failure, or a trapped signal. Both helpers disable shell
+tracing before credential material exists.
+
+Explicit token and JSON output modes remain available for askpass and reviewed
+callers; those requested outputs are credential-bearing and must not be sent to
+service logs or diagnostics. Existing agents must refresh all installed helper
+copies from one reviewed Agent Boot revision and compare them byte-for-byte
+before relying on this boundary.
+
 ## Platform and provider limits
 
 The imaging host contract is Linux only. macOS and Windows hosts are not

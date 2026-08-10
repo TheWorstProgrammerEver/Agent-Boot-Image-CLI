@@ -12,10 +12,10 @@ done
 for credential in app.pem codex.env; do
   test "$(stat -c '%a' "$HOME/.config/codex-github/$credential")" = "600"
 done
-test "$(git -C "$HOME/workspace/codex-agent-setup-github" rev-parse HEAD)" = \
+test "$(git -C "$HOME/workspace/agent-boot-image-cli" rev-parse HEAD)" = \
   "$github_revision"
 test "$(git -C "$HOME/workspace/codex-skills" rev-parse HEAD)" = "$skills_revision"
-test "$(git -C "$HOME/workspace/codex-agent-setup-mind-maintainer" rev-parse HEAD)" = \
+test "$(git -C "$HOME/workspace/codex-agent-mind-maintainer" rev-parse HEAD)" = \
   "$maintainer_revision"
 test -f "$HOME/.codex/skills/manage-durable-notes/SKILL.md"
 systemctl is-enabled --quiet codex-agent-mind-maintainer.timer

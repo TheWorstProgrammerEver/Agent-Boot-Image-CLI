@@ -198,9 +198,9 @@ export class PostCognitionCommandHost {
   async #verify(revisions) {
     const [github, skills, maintainer] = revisions;
     const checks = [
-      ["workspace/codex-agent-setup-github", github],
+      ["workspace/agent-boot-image-cli", github],
       ["workspace/codex-skills", skills],
-      ["workspace/codex-agent-setup-mind-maintainer", maintainer],
+      ["workspace/codex-agent-mind-maintainer", maintainer],
     ];
     for (const [relativePath, expected] of checks) {
       const actual = await readFile(

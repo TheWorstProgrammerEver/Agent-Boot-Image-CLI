@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: codex-gh [gh arguments...]
+
+Runs GitHub CLI with a short-lived GitHub App installation token.
+
+Environment overrides:
+  CODEX_GH_PERMISSIONS_JSON  Permissions JSON passed verbatim to
+                             codex-github-token --permissions-json.
+                             Default: {"contents":"write","pull_requests":"write"}
+  CODEX_GH_REPO              Restrict token to OWNER/REPO.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  printf 'Missing GitHub CLI: install the gh package first.\n' >&2
+  exit 127
+fi
+
+if ! command -v codex-github-token >/dev/null 2>&1; then
+  printf 'Missing token helper: codex-github-token is not on PATH.\n' >&2
+  exit 127
+fi
+
+temporary_parent="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+if [[ ! -d "$temporary_parent" || -L "$temporary_parent" ]]; then
+  printf 'GitHub CLI credential runtime directory is unavailable.\n' >&2
+  exit 1
+fi
+
+umask 077
+auth_dir=""
+
+cleanup() {
+  local status=$?
+  token=""
+  if [[ -n "${auth_dir:-}" ]]; then
+    if ! rm -rf -- "$auth_dir" 2>/dev/null; then
+      printf 'GitHub CLI credential cleanup failed.\n' >&2
+      if [[ "$status" -eq 0 ]]; then
+        status=1
+      fi
+    fi
+  fi
+  return "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if ! auth_dir="$(mktemp -d "$temporary_parent/codex-gh.XXXXXXXX" 2>/dev/null)"; then
+  printf 'GitHub CLI credential runtime directory could not be created.\n' >&2
+  exit 1
+fi
+auth_file="$auth_dir/hosts.yml"
+
+if [[ -L "$auth_dir" || "$(stat -c '%u:%a' "$auth_dir")" != "$(id -u):700" ]]; then
+  printf 'GitHub CLI credential runtime directory is unsafe.\n' >&2
+  exit 1
+fi
+
+default_permissions_json='{"contents":"write","pull_requests":"write"}'
+permissions_json="${CODEX_GH_PERMISSIONS_JSON:-$default_permissions_json}"
+token_args=(--permissions-json "$permissions_json")
+
+if [[ -n "${CODEX_GH_REPO:-}" ]]; then
+  token_args+=(--repo "$CODEX_GH_REPO")
+fi
+
+token="$(codex-github-token "${token_args[@]}")"
+case "$token" in
+  ""|*$'\n'*|*$'\r'*)
+    token=""
+    printf 'GitHub App token response was invalid.\n' >&2
+    exit 1
+    ;;
+esac
+
+escaped_token="${token//\'/\'\'}"
+builtin printf "github.com:\n    oauth_token: '%s'\n    user: x-access-token\n    git_protocol: https\n" \
+  "$escaped_token" >"$auth_file"
+chmod 0600 "$auth_file"
+token=""
+escaped_token=""
+
+set +e
+env -u GH_TOKEN -u GITHUB_TOKEN GH_CONFIG_DIR="$auth_dir" gh "$@"
+status=$?
+set -e
+exit "$status"

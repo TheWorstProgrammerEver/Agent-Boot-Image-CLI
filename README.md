@@ -69,6 +69,8 @@ confirmation.
   issues, tests, PRs, and physical evidence.
 - [Architecture decisions](docs/architecture/README.md): package and threat
   boundaries.
+- [GitHub App helper recipe](recipes/github-app-helpers/README.md): maintained
+  helper source plus installed-agent refresh and non-secret validation steps.
 
 Public examples under [`examples/`](examples/README.md) are maintained usage
 material and contain fake illustrative values only. Canonical JSON and golden

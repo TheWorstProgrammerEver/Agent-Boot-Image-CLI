@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-relative_source="${1:?home-relative setup repository is required}"
+relative_source="${1:?home-relative Agent Boot repository is required}"
 source_root="$HOME/$relative_source"
 config_dir="$HOME/.config/codex-github"
 
@@ -22,7 +22,7 @@ if ! grep -Eq '^(GITHUB_CLIENT_ID|GITHUB_APP_ID)=' "$config_dir/codex.env" ||
 fi
 
 CODEX_GITHUB_HELPER_INSTALL_DIR="$HOME/.local/bin" \
-  "$source_root/github/install-github-app-helpers.sh"
+  "$source_root/recipes/github-app-helpers/install-github-app-helpers.sh"
 for helper in codex-github-token codex-github-askpass codex-gh; do
   test -x "$HOME/.local/bin/$helper"
 done
