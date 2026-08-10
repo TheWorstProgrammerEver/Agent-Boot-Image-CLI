@@ -9,7 +9,8 @@
     "os-adapters": ["process", "protocol", "runner-bundle"],
     "os-linux": ["process", "protocol"],
     "runner": ["process", "protocol"],
-    "runner-bundle": ["process", "protocol", "runner"],
+    "scheduled-prompt-jobs": ["process"],
+    "runner-bundle": ["process", "protocol", "runner", "scheduled-prompt-jobs"],
     "cli": ["assembly", "definition", "os-adapters", "os-linux", "process", "protocol", "runner", "runner-bundle", "synth"]
   }
 }

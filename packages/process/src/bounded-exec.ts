@@ -36,9 +36,10 @@ export const toBoundedShellCommand = (command: BoundedExecCommand): string => {
   const environment = command.environment === undefined
     ? []
     : environmentArguments(command.environment);
-  const withEnvironment = environment.length === 0
+  const environmentPrefix = command.environmentMode === 'replace' ? ['env', '-i'] : ['env'];
+  const withEnvironment = environment.length === 0 && command.environmentMode !== 'replace'
     ? invocation
-    : ['env', ...environment, ...invocation];
+    : [...environmentPrefix, ...environment, ...invocation];
   if (command.cwd === undefined) return withEnvironment.join(' ');
   return `cd -- ${quote(command.cwd)} && ${withEnvironment.join(' ')}`;
 };

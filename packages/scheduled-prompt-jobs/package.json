@@ -1,0 +1,20 @@
+{
+  "name": "@agent-boot/scheduled-prompt-jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Validated systemd-backed Markdown prompt jobs for Agent Boot appliances.",
+  "bin": {
+    "agent-boot-prompt-jobs": "dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "dependencies": {
+    "@agent-boot/process": "0.0.0"
+  }
+}

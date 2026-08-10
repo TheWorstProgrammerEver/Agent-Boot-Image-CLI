@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "effectPolicy": "read-only",
+      "id": "canary",
+      "logRetention": 10,
+      "model": "gpt-5.6-sol",
+      "onCalendar": "*-*-* 04:00:00",
+      "overlapGroup": "heavy-work",
+      "persistent": false,
+      "prompt": "canary.md",
+      "randomizedDelaySeconds": 900,
+      "reasoningEffort": "high",
+      "timeoutSeconds": 300,
+      "workingDirectory": "workspace"
+    },
+    {
+      "effectPolicy": "read-only",
+      "id": "maintenance-report",
+      "logRetention": 14,
+      "model": "gpt-5.6-sol",
+      "onCalendar": "Mon..Fri *-*-* 06:30:00",
+      "overlapGroup": "heavy-work",
+      "persistent": true,
+      "prompt": "maintenance-report.md",
+      "randomizedDelaySeconds": 1800,
+      "reasoningEffort": "high",
+      "timeoutSeconds": 1800,
+      "workingDirectory": "workspace"
+    }
+  ]
+}

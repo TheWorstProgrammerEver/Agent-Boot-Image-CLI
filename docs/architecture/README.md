@@ -13,7 +13,8 @@ workspace before product behavior is added.
 | `os-adapters` | `process`, `protocol`, `runner-bundle` | Definition evaluation and generic image orchestration |
 | `os-linux` | `process`, `protocol` | Definition evaluation and synthesis |
 | `runner` | `process`, `protocol` | Definition evaluation, assembly I/O, and host OS adapters |
-| `runner-bundle` | `process`, `protocol`, `runner` | Host image orchestration and OS-specific mutation |
+| `scheduled-prompt-jobs` | `process` | Definition evaluation, assembly I/O, and host OS adapters |
+| `runner-bundle` | `process`, `protocol`, `runner`, `scheduled-prompt-jobs` | Host image orchestration and OS-specific mutation |
 | `cli` | All composition dependencies | N/A; this is the composition root |
 
 `config/package-boundaries.json` is the machine-readable form of this table.
@@ -32,3 +33,4 @@ TypeScript imports against it.
 8. [Runner-lifetime fire-and-forget processes](0008-fire-and-forget-lifecycle.md)
 9. [Verified private runner bundle and console service](0009-private-runner-bundle.md)
 10. [Raspberry Pi OS Trixie customization boundary](0010-raspberry-pi-os-trixie-adapter.md)
+11. [Scheduled Markdown prompt jobs](0011-scheduled-markdown-prompt-jobs.md)

@@ -4,6 +4,7 @@ export const BUNDLE_MANIFEST_PATH = "manifest.json";
 export const BUNDLE_ROOT_PATH = "root";
 export const RUNNER_SERVICE_NAME = "agent-boot-runner.service";
 export const NETWORK_COMMAND_PATH = "/usr/local/sbin/agent-boot-network";
+export const PROMPT_JOB_COMMAND_PATH = "/usr/local/sbin/agent-boot-prompt-jobs";
 export const TARGET_PATHS = {
   assemblyManifest: "/etc/agent-boot/manifest.json",
   bootstrapSecrets: "/etc/agent-boot/bootstrap-secrets",

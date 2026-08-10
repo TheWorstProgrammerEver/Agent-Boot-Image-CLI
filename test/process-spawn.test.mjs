@@ -51,6 +51,22 @@ test('spawn preserves arguments and environment while streaming both outputs', a
   assert.deepEqual(result, { exitCode: 0, reason: 'exit', signal: null });
 });
 
+test('spawn can replace the inherited environment with an explicit minimal set', async () => {
+  const chunks = [];
+  const script = 'process.stdout.write(JSON.stringify(process.env));';
+  const running = new NodeSpawnAdapter().spawn(streamedCommand(script, {
+    environment: { LANG: 'C.UTF-8', PATH: '/usr/bin:/bin' },
+    environmentMode: 'replace',
+    onOutput: chunk => chunks.push(chunk),
+  }));
+
+  assert.equal((await running.completion).exitCode, 0);
+  assert.deepEqual(
+    JSON.parse(Buffer.concat(chunks.map(chunk => chunk.data)).toString()),
+    { LANG: 'C.UTF-8', PATH: '/usr/bin:/bin' },
+  );
+});
+
 test('spawn writes deliberate stdin without exposing it in command diagnostics', async () => {
   const marker = 'provider-prompt-private-marker';
   const chunks = [];

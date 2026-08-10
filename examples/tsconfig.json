@@ -12,6 +12,7 @@
   },
   "include": [
     "definitive-agent/**/*.ts",
-    "post-cognition-agent/**/*.ts"
+    "post-cognition-agent/**/*.ts",
+    "scheduled-prompt-jobs/**/*.ts"
   ]
 }

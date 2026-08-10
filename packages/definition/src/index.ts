@@ -61,5 +61,11 @@ export {
   type SequenceStep,
   type SequenceStepInput,
 } from "./steps.js";
+export {
+  scheduledPromptJobs,
+  type ScheduledPromptJobsOptions,
+  type ScheduledPromptJobsSlice,
+  type ScheduledPromptSource,
+} from "./components/scheduled-prompt-jobs.js";
 export { DefinitionValidationError } from "./validation.js";
 export * from "./providers/index.js";

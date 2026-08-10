@@ -119,9 +119,14 @@ test("runner bundles are reproducible, target-addressable, and mode separated", 
     assert.equal(entries.get("/opt/agent-boot/runtime/bin/node").mode, "0755");
     assert.equal(entries.get("/opt/agent-boot/scripts/bin/agent-boot-runner").mode, "0755");
     assert.equal(entries.get("/opt/agent-boot/scripts/bin/agent-boot-network").mode, "0755");
+    assert.equal(entries.get("/opt/agent-boot/scripts/bin/agent-boot-prompt-jobs").mode, "0755");
     assert.equal(
       entries.get("/usr/local/sbin/agent-boot-network").linkTarget,
       "../../../opt/agent-boot/scripts/bin/agent-boot-network",
+    );
+    assert.equal(
+      entries.get("/usr/local/sbin/agent-boot-prompt-jobs").linkTarget,
+      "../../../opt/agent-boot/scripts/bin/agent-boot-prompt-jobs",
     );
     assert.equal(entries.get("/etc/systemd/system/agent-boot-runner.service").mode, "0644");
     assert.equal(entries.get("/etc/agent-boot").mode, "0750");

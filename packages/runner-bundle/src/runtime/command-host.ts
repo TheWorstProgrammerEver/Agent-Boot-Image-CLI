@@ -34,6 +34,7 @@ export class RuntimeCommandHost implements CommandHost {
       ...(command.arguments === undefined ? {} : { arguments: command.arguments }),
       ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
       ...(command.environment === undefined ? {} : { environment: command.environment }),
+      ...(command.environmentMode === undefined ? {} : { environmentMode: command.environmentMode }),
       executable: command.executable,
       ...(command.label === undefined ? {} : { label: command.label }),
       lifetime: { policy: "managed" },

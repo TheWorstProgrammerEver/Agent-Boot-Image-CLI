@@ -14,6 +14,9 @@ there. Never add those files back to this repository.
   authored-recipe pattern. Its repository names, revisions, credential inputs,
   and service names are illustrative and must be replaced with reviewed
   deployment values.
+- [`scheduled-prompt-jobs/`](scheduled-prompt-jobs/README.md) is the reusable
+  disabled-first manifest and Markdown overlay, including a harmless canary,
+  finite timer and reboot gates, and replay-safe external-effect policy.
 
 Internal canonical JSON, golden filesystem trees, and non-destructive harness
 inputs live under `packages/*/fixtures`, `test/`, and `test-support/`. Those
