@@ -5,11 +5,13 @@ used by managed-agent definitions. The helpers mint repository- and
 permission-narrowed installation tokens without placing the App JWT or minted
 token in a child process's arguments or exported environment.
 
-`codex-github-token` gives curl its authorization header through a config read
-from standard input. `codex-gh` gives GitHub CLI a mode-`0600` configuration in
-an owner-only `mktemp` directory, removes inherited token variables, and removes
-the directory on every normal, failed, or trapped exit. All helpers disable
-shell tracing before handling credential material and project bounded errors.
+`codex-github-token` disables ambient curl configuration before giving curl its
+authorization header through a config read from standard input. `codex-gh`
+gives GitHub CLI a mode-`0600` configuration in an owner-only `mktemp`
+directory after rejecting symlinked or attacker-writable non-sticky runtime
+ancestry, removes inherited token variables, and removes the directory on every
+normal, failed, or trapped exit. All helpers disable shell tracing before
+handling credential material and project bounded errors.
 
 ## Install or refresh
 

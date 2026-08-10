@@ -134,6 +134,7 @@ PY
 fi
 
 curl_args=(
+  --disable
   --fail-with-body
   --silent
   --show-error

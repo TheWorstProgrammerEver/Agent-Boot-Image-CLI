@@ -79,6 +79,9 @@ set -euo pipefail
 tr '\\0' '\\n' </proc/$$/cmdline >"$CAPTURE_DIRECTORY/curl.argv"
 env >"$CAPTURE_DIRECTORY/curl.env"
 cat >"$CAPTURE_DIRECTORY/curl.stdin"
+if [[ "\${1:-}" != "--disable" && -f "$HOME/.curlrc" ]]; then
+  cp "$CAPTURE_DIRECTORY/curl.stdin" "$CAPTURE_DIRECTORY/curl.trace"
+fi
 if [[ "\${FAKE_CURL_MODE:-success}" == "failure" ]]; then
   printf '{"message":"${jwtSentinel} ${tokenSentinel}"}'
   printf 'curl failure: ${jwtSentinel} ${tokenSentinel}\n' >&2
@@ -210,6 +213,10 @@ test("token request keeps the JWT out of curl argv, environment, and failures", 
   const fixture = await createFixture();
   const helper = join(recipeRoot, "codex-github-token");
   try {
+    await writeFile(
+      join(fixture.environment.HOME, ".curlrc"),
+      `trace-ascii = "${join(fixture.capture, "curl.trace")}"\n`,
+    );
     const success = await execFileAsync(
       "bash",
       [
@@ -229,6 +236,7 @@ test("token request keeps the JWT out of curl argv, environment, and failures", 
     const argv = await readFile(join(fixture.capture, "curl.argv"), "utf8");
     const environment = await readFile(join(fixture.capture, "curl.env"), "utf8");
     const standardInput = await readFile(join(fixture.capture, "curl.stdin"), "utf8");
+    assert.equal(argv.split("\n")[2], "--disable");
     assert.match(argv, /--config\n-\n/u);
     assert.match(
       argv,
@@ -240,6 +248,7 @@ test("token request keeps the JWT out of curl argv, environment, and failures", 
       standardInput,
       new RegExp(`Authorization: Bearer header\\.payload\\.${jwtSentinel}`, "u"),
     );
+    await absent(join(fixture.capture, "curl.trace"));
 
     await assert.rejects(
       execFileAsync("bash", ["-x", helper, "--expires-at"], {
@@ -370,6 +379,49 @@ printf '{"name":"example-repo"}\n'
       execFileAsync(join(fixture.bin, "codex-gh"), ["api", "user"], {
         encoding: "utf8",
         env: { ...fixture.environment, TMPDIR: linkedRuntime },
+      }),
+      error => {
+        assert.equal(error.code, 1);
+        assert.equal(error.stdout, "");
+        assert.equal(
+          error.stderr,
+          "GitHub CLI credential runtime directory is unavailable.\n",
+        );
+        return true;
+      },
+    );
+
+    const nestedRuntimeTarget = join(fixture.runtime, "nested");
+    const nestedRuntimeParent = join(fixture.root, "runtime-parent");
+    await mkdir(nestedRuntimeTarget, { mode: 0o700 });
+    await mkdir(nestedRuntimeParent, { mode: 0o700 });
+    await symlink(fixture.runtime, join(nestedRuntimeParent, "redirect"));
+    await assert.rejects(
+      execFileAsync(join(fixture.bin, "codex-gh"), ["api", "user"], {
+        encoding: "utf8",
+        env: {
+          ...fixture.environment,
+          TMPDIR: join(nestedRuntimeParent, "redirect", "nested"),
+        },
+      }),
+      error => {
+        assert.equal(error.code, 1);
+        assert.equal(error.stdout, "");
+        assert.equal(
+          error.stderr,
+          "GitHub CLI credential runtime directory is unavailable.\n",
+        );
+        return true;
+      },
+    );
+
+    const attackerWritableRuntime = join(fixture.root, "attacker-writable-runtime");
+    await mkdir(attackerWritableRuntime, { mode: 0o777 });
+    await chmod(attackerWritableRuntime, 0o777);
+    await assert.rejects(
+      execFileAsync(join(fixture.bin, "codex-gh"), ["api", "user"], {
+        encoding: "utf8",
+        env: { ...fixture.environment, TMPDIR: attackerWritableRuntime },
       }),
       error => {
         assert.equal(error.code, 1);
