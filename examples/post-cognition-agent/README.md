@@ -18,7 +18,7 @@ step is the successful `codex login status` gate. The authored sequence then:
 1. updates normal interactive Codex autonomy defaults with an idempotent script;
 2. installs git deterministically;
 3. transactionally installs the GitHub App private key and identifier config;
-4. checks out reviewed GitHub helper, skills, and Mind Maintainer revisions;
+4. checks out reviewed Agent Boot helper, skills, and Mind Maintainer revisions;
 5. installs the askpass helpers and Codex skills;
 6. installs and enables the Mind Maintainer service/timer;
 7. renders a non-secret boot and setup audit prompt and runs Codex, allowing
@@ -26,13 +26,18 @@ step is the successful `codex login status` gate. The authored sequence then:
 8. deterministically verifies the prompt report and all prior setup; and
 9. reaches terminal ready state only when the runner checkpoints success.
 
-The external repository revisions are exact commits. Review and deliberately
-update those pins before a future physical run.
+The external repository revisions are exact commits. GitHub helpers come from
+the maintained `recipes/github-app-helpers` source in the Agent Boot checkout,
+not from a retired setup repository. Review and deliberately update all pins
+before a future physical run.
 
 GitHub App helpers are optional, not base image infrastructure. Omit the helper
 checkout, private-key install, and configuration steps for agents that only use
 public repositories or do not need to contribute changes. Add them only when an
-agent needs private repository access or short-lived write credentials.
+agent needs private repository access or short-lived write credentials. For an
+already commissioned agent, follow the maintained helper
+[refresh procedure](../../recipes/github-app-helpers/README.md#install-or-refresh)
+and prove the installed copies match the reviewed Agent Boot revision.
 
 ## Primitive boundary
 

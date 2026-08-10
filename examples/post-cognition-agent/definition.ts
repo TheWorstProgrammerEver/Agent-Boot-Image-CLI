@@ -18,8 +18,10 @@ import {
 const CODEX_SKILLS_REVISION = "1111111111111111111111111111111111111111";
 const GITHUB_HELPERS_REVISION = "2222222222222222222222222222222222222222";
 const MIND_MAINTAINER_REVISION = "3333333333333333333333333333333333333333";
-const SETUP_REPOSITORY =
-  "https://github.com/example-org/agent-setup.git";
+const AGENT_BOOT_REPOSITORY =
+  "https://github.com/example-org/agent-boot-image-cli.git";
+const MIND_MAINTAINER_REPOSITORY =
+  "https://github.com/example-org/agent-mind-maintainer.git";
 const SKILLS_REPOSITORY =
   "https://github.com/example-org/agent-skills.git";
 
@@ -111,14 +113,14 @@ export default defineAgent({
     automatic(
       "sync-github-helper-source",
       command(syncRepository, [
-        SETUP_REPOSITORY,
+        AGENT_BOOT_REPOSITORY,
         GITHUB_HELPERS_REVISION,
-        "workspace/codex-agent-setup-github",
+        "workspace/agent-boot-image-cli",
       ]),
     ),
     automatic(
       "install-github-app-helpers",
-      command(installGithubHelpers, ["workspace/codex-agent-setup-github"]),
+      command(installGithubHelpers, ["workspace/agent-boot-image-cli"]),
     ),
     automatic(
       "sync-codex-skills-repository",
@@ -135,15 +137,15 @@ export default defineAgent({
     automatic(
       "sync-mind-maintainer-source",
       command(syncRepository, [
-        SETUP_REPOSITORY,
+        MIND_MAINTAINER_REPOSITORY,
         MIND_MAINTAINER_REVISION,
-        "workspace/codex-agent-setup-mind-maintainer",
+        "workspace/codex-agent-mind-maintainer",
       ]),
     ),
     automatic(
       "install-mind-maintainer",
       command(installMindMaintainer, [
-        "workspace/codex-agent-setup-mind-maintainer",
+        "workspace/codex-agent-mind-maintainer",
       ]),
     ),
     renderPrompt(

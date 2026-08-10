@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+
+CONFIG_DIR="${CODEX_GITHUB_CONFIG_DIR:-$HOME/.config/codex-github}"
+ENV_FILE="${CODEX_GITHUB_ENV:-$CONFIG_DIR/codex.env}"
+KEY_FILE_DEFAULT="$CONFIG_DIR/app.pem"
+
+usage() {
+  cat <<'EOF'
+Usage: codex-github-token [options]
+
+Mint a short-lived GitHub App installation token using:
+  ~/.config/codex-github/codex.env
+  ~/.config/codex-github/app.pem
+
+Options:
+  --json                    Print the full GitHub JSON response.
+  --expires-at              Print only the token expiry timestamp.
+  --full-permissions        Request all permissions granted to the installation.
+  --permissions-json JSON   Request a narrower permissions object.
+                            Default: {"contents":"write","pull_requests":"write"}
+  --repositories CSV        Restrict the token to repository names in CSV form.
+  --repo OWNER/REPO         Restrict the token to a single owner/repo.
+  -h, --help                Show this help.
+EOF
+}
+
+output="token"
+full_permissions=0
+permissions_json='{"contents":"write","pull_requests":"write"}'
+repositories_csv=""
+
+while (($#)); do
+  case "$1" in
+    --json)
+      output="json"
+      shift
+      ;;
+    --expires-at)
+      output="expires_at"
+      shift
+      ;;
+    --full-permissions)
+      full_permissions=1
+      shift
+      ;;
+    --permissions-json)
+      permissions_json="${2:?missing JSON after --permissions-json}"
+      shift 2
+      ;;
+    --repositories)
+      repositories_csv="${2:?missing CSV after --repositories}"
+      shift 2
+      ;;
+    --repo)
+      repo_arg="${2:?missing OWNER/REPO after --repo}"
+      repositories_csv="${repo_arg##*/}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -f "$ENV_FILE" ]]; then
+  # codex.env is local shell syntax owned by this user; it stores IDs and paths, not tokens.
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
+app_id="${GITHUB_CLIENT_ID:-${GITHUB_APP_ID:-}}"
+installation_id="${GITHUB_INSTALLATION_ID:-}"
+key_file="${GITHUB_PRIVATE_KEY_PATH:-$KEY_FILE_DEFAULT}"
+api_version="${GITHUB_API_VERSION:-2026-03-10}"
+
+if [[ -z "$app_id" || -z "$installation_id" ]]; then
+  printf 'Missing GitHub App configuration identifiers.\n' >&2
+  exit 1
+fi
+
+if [[ ! -r "$key_file" ]]; then
+  printf 'Missing or unreadable GitHub App private key.\n' >&2
+  exit 1
+fi
+
+b64url() {
+  openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+now="$(date +%s)"
+iat="$((now - 60))"
+exp="$((now + 600))"
+header_json='{"typ":"JWT","alg":"RS256"}'
+payload_json="$(printf '{\"iat\":%s,\"exp\":%s,\"iss\":\"%s\"}' "$iat" "$exp" "$app_id")"
+
+header="$(printf '%s' "$header_json" | b64url)"
+payload="$(printf '%s' "$payload_json" | b64url)"
+header_payload="$header.$payload"
+signature="$(printf '%s' "$header_payload" | openssl dgst -sha256 -sign "$key_file" | b64url)"
+jwt="$header_payload.$signature"
+
+body=""
+if [[ "$full_permissions" -eq 0 || -n "$repositories_csv" ]]; then
+  body="$(
+    python3 - "$full_permissions" "$permissions_json" "$repositories_csv" <<'PY'
+import json
+import sys
+
+full_permissions = sys.argv[1] == "1"
+permissions_json = sys.argv[2]
+repositories_csv = sys.argv[3]
+
+body = {}
+if not full_permissions:
+    body["permissions"] = json.loads(permissions_json)
+
+repositories = [item.strip() for item in repositories_csv.split(",") if item.strip()]
+if repositories:
+    body["repositories"] = repositories
+
+print(json.dumps(body, separators=(",", ":")))
+PY
+  )"
+fi
+
+curl_args=(
+  --disable
+  --fail-with-body
+  --silent
+  --show-error
+  --request POST
+  --url "https://api.github.com/app/installations/$installation_id/access_tokens"
+  --header "Accept: application/vnd.github+json"
+  --header "X-GitHub-Api-Version: $api_version"
+)
+
+if [[ -n "$body" ]]; then
+  curl_args+=(--header "Content-Type: application/json" --data "$body")
+fi
+
+if ! response="$(
+  curl "${curl_args[@]}" --config - 2>/dev/null <<EOF
+header = "Authorization: Bearer $jwt"
+EOF
+)"; then
+  response=""
+  printf 'GitHub App token request failed.\n' >&2
+  exit 1
+fi
+
+case "$output" in
+  json)
+    printf '%s\n' "$response"
+    ;;
+  expires_at)
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["expires_at"])' <<<"$response"
+    ;;
+  token)
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$response"
+    ;;
+esac

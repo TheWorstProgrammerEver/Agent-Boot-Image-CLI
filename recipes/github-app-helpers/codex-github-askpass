@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+
+prompt="${1:-}"
+
+case "$prompt" in
+  *Username*|*username*)
+    printf 'x-access-token\n'
+    ;;
+  *Password*|*password*)
+    token_args=()
+
+    if [[ -n "${CODEX_GH_PERMISSIONS_JSON:-}" ]]; then
+      token_args+=(--permissions-json "$CODEX_GH_PERMISSIONS_JSON")
+    fi
+
+    if [[ -n "${CODEX_GH_REPO:-}" ]]; then
+      token_args+=(--repo "$CODEX_GH_REPO")
+    fi
+
+    exec codex-github-token "${token_args[@]}"
+    ;;
+  *)
+    printf '\n'
+    ;;
+esac
